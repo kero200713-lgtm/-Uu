@@ -35,7 +35,7 @@ async function body(file, outName) {
     else { mat.setNormalTexture(null); }
   }
   for (const a of doc.getRoot().listAnimations()) a.dispose();
-  await doc.transform(prune(), dedup(), textureCompress({ encoder: sharp, targetFormat: 'jpeg', resize: [128, 128] }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  await doc.transform(prune({ keepAttributes: true }), dedup(), textureCompress({ encoder: sharp, targetFormat: 'jpeg', resize: [128, 128] }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   await io.write(path.join(OUT, outName), doc);
   console.log(outName, Math.round(fs.statSync(path.join(OUT, outName)).size / 1024), 'KB');
 }
@@ -44,7 +44,7 @@ async function hair(name) {
   const doc = await io.read(path.join(hairDir, name + '.gltf'));
   stripAttributes(doc);
   for (const a of doc.getRoot().listAnimations()) a.dispose();
-  await doc.transform(prune(), dedup(), textureCompress({ encoder: sharp, targetFormat: 'jpeg', resize: [512, 512] }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  await doc.transform(prune({ keepAttributes: true }), dedup(), textureCompress({ encoder: sharp, targetFormat: 'jpeg', resize: [512, 512] }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const out = path.join(OUT, 'hair_' + name.replace(/^Hair_/, '').toLowerCase() + '.glb');
   await io.write(out, doc);
   console.log(path.basename(out), Math.round(fs.statSync(out).size / 1024), 'KB');
@@ -85,7 +85,7 @@ async function bodyLod(file, outName, ratio) {
     else mat.setNormalTexture(null);
   }
   for (const a of doc.getRoot().listAnimations()) a.dispose();
-  await doc.transform(weld({ tolerance: 0.0001 }), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.004, lockBorder: true }), prune(), dedup(),
+  await doc.transform(weld({ tolerance: 0.0001 }), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.004, lockBorder: true }), prune({ keepAttributes: true }), dedup(),
     textureCompress({ encoder: sharp, targetFormat: 'jpeg', resize: [128, 128] }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   let tris = 0; for (const m of doc.getRoot().listMeshes()) for (const p of m.listPrimitives()) tris += p.getIndices().getCount() / 3;
   await io.write(path.join(OUT, outName), doc);

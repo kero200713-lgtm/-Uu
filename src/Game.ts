@@ -346,6 +346,7 @@ export class Game implements World {
     this.player.spawn(p, (yawDeg * Math.PI) / 180);
     this.rig.yaw = (yawDeg * Math.PI) / 180; this.rig.pitch = pitch; this.rig.dist = 2.4;
   }
+  findFocusPublic() { return this.findFocus(); }
   debugGive(id: string, n = 1) { this.player.inv.add(id, n); if (ITEMS[id]?.kind === 'weapon') { this.player.inv.mags[id] = ITEMS[id].weapon!.mag; this.player.equip(id); } }
   frameStats() {
     const i = this.engine.renderer.info;
@@ -405,6 +406,7 @@ export class Game implements World {
     if (this.player.dead || this.player.grabbedBy) return;
     this.state = 'inventory'; this.engine.paused = true;
     this.touch.show(false); input.reset();
+    this.hud.show(false);
     this.invUI.show(true);
     audio.proc?.rustle(0.18, 0.25);
     this.engine.renderOverride = (r) => { this.invUI.render(r, 1 / 60); return true; };
@@ -412,6 +414,7 @@ export class Game implements World {
   closeInventory() {
     this.invUI.show(false);
     this.engine.renderOverride = null;
+    this.hud.show(true);
     this.state = 'play'; this.engine.paused = false;
     this.touch.show(this.isTouch());
     audio.proc?.rustle(0.12, 0.2);

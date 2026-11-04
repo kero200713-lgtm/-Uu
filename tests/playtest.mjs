@@ -64,6 +64,26 @@ if (scenario === 'areas') {
     }
   }
 }
+if (scenario === 'ui') {
+  await page.evaluate(() => { const g = window.__game; g.debugGive('pistol'); g.debugGive('ammo_9mm', 24); g.debugGive('bandage', 2); g.debugGive('medkit'); g.debugGive('flare', 2); g.debugGive('battery'); g.player.inv.add('key_police'); g.player.inv.add('boltcutter'); });
+  await page.evaluate(() => window.__game.openInventory());
+  await page.waitForTimeout(600);
+  const slot = page.locator('#inventory .slot:not(.empty)').nth(1);
+  await slot.click(); await page.waitForTimeout(900);
+  await page.screenshot({ path: `${OUT}/ui-inventory.png` });
+  await page.evaluate(() => window.__game.closeInventory());
+  await page.evaluate(() => window.__game.pause()); await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/ui-pause.png` });
+  await page.evaluate(() => window.__game.openSettings('controls')); await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/ui-settings.png` });
+  await page.locator('.tab[data-t=language]').click(); await page.waitForTimeout(300);
+  await page.locator('.ch[data-v=en]').click(); await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/ui-settings-en.png` });
+  await page.evaluate(() => window.__game.resume()); await page.waitForTimeout(400);
+  await page.evaluate(() => { const g = window.__game; g.player.hp = 22; g.engine.fx.low = 0.8; });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/ui-lowhp-en.png` });
+}
 const list = shots[scenario] || [];
 let i = 1;
 for (const [x, y, yaw, pitch] of list) {

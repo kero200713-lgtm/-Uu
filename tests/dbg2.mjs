@@ -1,0 +1,32 @@
+import { chromium } from 'playwright';
+import http from 'http'; import fs from 'fs'; import path from 'path';
+const ROOT = path.resolve('dist');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.mp3': 'audio/mpeg', '.woff2': 'font/woff2' };
+const srv = http.createServer((q, res) => { let p = decodeURIComponent(q.url.split('?')[0]); if (p === '/') p = '/index.html'; fs.readFile(path.join(ROOT, p), (e, d) => { if (e) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' }); res.end(d); }); }).listen(0);
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await b.newPage({ viewport: { width: 960, height: 440 } });
+page.on('pageerror', (e) => console.log('pageerror', e.message, e.stack?.split('\n').slice(0,3).join(' | ')));
+page.on('console', (m) => { if (m.type() === 'error') console.log('console.error', m.text().slice(0, 300)); });
+await page.addInitScript(() => localStorage.setItem('ugultu_settings_v1', JSON.stringify({ quality: 'high', language: 'tr' })));
+await page.goto(`http://localhost:${srv.address().port}/`);
+await page.waitForFunction(() => window.__game && window.__game.state === 'menu', null, { timeout: 120000 });
+await page.evaluate(() => window.__game.newGame());
+await page.waitForFunction(() => window.__game.state === 'play', null, { timeout: 120000 });
+await page.evaluate(() => window.__game.loadArea('town', 'from_forest'));
+const r = await page.evaluate(async () => {
+  const g = window.__game;
+  g.flags.add('unlock:house_front');
+  g.debugTeleport(5.5, 31.2, 180, -0.05);
+  g.player.yaw = 0; g.player.root.rotation.y = 0; // face the camera
+  g.rig.yaw = Math.PI; g.rig.dist = 1.8;
+  return { ok: true };
+});
+await page.waitForTimeout(2500);
+await page.evaluate(() => { const g = window.__game; g.player.yaw = 0; g.rig.yaw = Math.PI; });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: '/tmp/claude-0/ela_front.png' });
+await page.evaluate(() => { const g = window.__game; g.player.yaw = Math.PI; g.rig.yaw = Math.PI; });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: '/tmp/claude-0/ela_back.png' });
+console.log(JSON.stringify(r, null, 1));
+await b.close(); srv.close();

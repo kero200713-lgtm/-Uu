@@ -110,13 +110,13 @@ body.touch .hud-ammo { top: calc(70px + var(--sa-t)); }
 .tb-interact .lbl:empty { display: none; }
 .tb-reload { width: 56px; height: 56px; right: calc(150px + var(--sa-r)); bottom: calc(116px + var(--sa-b)); }
 .tb-crouch { width: 58px; height: 58px; right: calc(224px + var(--sa-r)); bottom: calc(40px + var(--sa-b)); }
-.tb-heal { width: 54px; height: 54px; left: calc(22px + var(--sa-l)); top: calc(96px + var(--sa-t)); color: var(--warn); border-color: rgba(217,163,91,0.6); }
+.tb-heal { width: 50px; height: 50px; left: calc(170px + var(--sa-l)); top: calc(10px + var(--sa-t)); color: var(--warn); border-color: rgba(217,163,91,0.6); }
 .tb.small { width: 46px; height: 46px; top: calc(12px + var(--sa-t)); }
 .tb-switch { right: calc(176px + var(--sa-r)); } .tb-flash { right: calc(124px + var(--sa-r)); } .tb-inv { right: calc(72px + var(--sa-r)); } .tb-pause { right: calc(20px + var(--sa-r)); }
 #touch.lefty .tb-fire { right: auto; left: calc(28px + var(--sa-l)); } #touch.lefty .tb-aim { right: auto; left: calc(134px + var(--sa-l)); }
 #touch.lefty .tb-interact { right: auto; left: calc(40px + var(--sa-l)); } #touch.lefty .tb-interact .lbl { right: auto; left: 90px; }
 #touch.lefty .tb-reload { right: auto; left: calc(150px + var(--sa-l)); } #touch.lefty .tb-crouch { right: auto; left: calc(224px + var(--sa-l)); }
-#touch.lefty .tb-heal { left: auto; right: calc(22px + var(--sa-r)); top: calc(70px + var(--sa-t)); }
+#touch.lefty .tb-heal { left: calc(170px + var(--sa-l)); }
 
 /* ----------------------------------------------------------- screens */
 #screens { position: absolute; inset: 0; pointer-events: none; }

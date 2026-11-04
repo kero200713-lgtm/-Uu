@@ -17,9 +17,9 @@ float fbm3(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a
  * Organic flesh-crystal material: vertex displacement "breathing", glowing
  * veins that pulse with the song, and a dissolve used when it shatters.
  */
-function choirMaterial(base: number, veinStrength: number, amp: number) {
-  const m = new THREE.MeshStandardMaterial({ color: base, roughness: 0.35, metalness: 0.1, emissive: 0x5fe8d0, emissiveIntensity: 1 });
-  const u = { uDissolve: { value: 0 }, uPulse: { value: 0 }, uAmp: { value: amp }, uVein: { value: veinStrength } };
+function choirMaterial(base: number, veinStrength: number, amp: number, freq = 1) {
+  const m = new THREE.MeshStandardMaterial({ color: base, roughness: 0.35, metalness: 0.1, emissive: 0x5fe8d0, emissiveIntensity: 0.55 });
+  const u = { uDissolve: { value: 0 }, uPulse: { value: 0 }, uAmp: { value: amp }, uVein: { value: veinStrength }, uFreq: { value: freq } };
   m.userData.u = u;
   m.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, u, { uTime: shared.uTime });
@@ -27,11 +27,11 @@ function choirMaterial(base: number, veinStrength: number, amp: number) {
       .replace('#include <common>', `#include <common>\nuniform float uTime; uniform float uAmp; uniform float uPulse; varying vec3 vObj;\n${NOISE_GLSL}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n vObj = position;\n float n = fbm3(position * 0.45 + vec3(0.0, uTime * 0.25, 0.0));\n transformed += normal * (n - 0.45) * uAmp * (1.0 + 0.35 * sin(uTime * 2.2) + uPulse);`);
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime; uniform float uDissolve; uniform float uPulse; uniform float uVein; varying vec3 vObj;\n${NOISE_GLSL}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n float dn = fbm3(vObj * 0.8);\n if (dn < uDissolve * 1.1 - 0.05) discard;\n diffuseColor.rgb *= 0.7 + 0.5 * fbm3(vObj * 2.5);`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n float v = 1.0 - abs(fbm3(vObj * 3.2 + vec3(uTime * 0.05)) - 0.5) * 2.0;\n float vein = smoothstep(0.9, 0.99, v) * uVein * 0.8;\n float edge = smoothstep(uDissolve * 1.1 - 0.05, uDissolve * 1.1 + 0.08, dn);\n totalEmissiveRadiance *= vein * (0.6 + 0.4 * sin(uTime * 3.0 - vObj.y * 1.5) + uPulse * 2.0);\n totalEmissiveRadiance += vec3(1.0, 0.9, 0.7) * (1.0 - edge) * step(0.001, uDissolve) * 3.0;`);
+      .replace('#include <common>', `#include <common>\nuniform float uTime; uniform float uDissolve; uniform float uPulse; uniform float uVein; uniform float uFreq; varying vec3 vObj;\n${NOISE_GLSL}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n float dn = fbm3(vObj * 0.8);\n if (dn < uDissolve * 1.1 - 0.05) discard;\n diffuseColor.rgb *= 0.7 + 0.5 * fbm3(vObj * 2.5 * uFreq);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n float v = 1.0 - abs(fbm3(vObj * 3.2 * uFreq + vec3(uTime * 0.05)) - 0.5) * 2.0;\n float vein = smoothstep(0.9, 0.99, v) * uVein * 0.8;\n float edge = smoothstep(uDissolve * 1.1 - 0.05, uDissolve * 1.1 + 0.08, dn);\n totalEmissiveRadiance *= vein * (0.6 + 0.4 * sin(uTime * 3.0 - vObj.y * 1.5) + uPulse * 2.0);\n totalEmissiveRadiance += vec3(1.0, 0.9, 0.7) * (1.0 - edge) * step(0.001, uDissolve) * 3.0;`);
   };
-  m.customProgramCacheKey = () => 'choir' + amp;
+  m.customProgramCacheKey = () => 'choir';
   return m;
 }
 
@@ -55,7 +55,7 @@ export class ChoirBoss {
 
   constructor(private g: Game, center: THREE.Vector3) {
     this.center = center.clone();
-    this.spikeMat = choirMaterial(0x3a4a44, 1.2, 0.08);
+    this.spikeMat = choirMaterial(0x3a4a44, 0.9, 0.08, 0.6);
   }
 
   async init() {
@@ -70,7 +70,7 @@ export class ChoirBoss {
     this.core.castShadow = false; this.core.receiveShadow = true;
     this.group.add(this.core);
     // gill plates around the core (it "listens")
-    const plateMat = choirMaterial(0x6a7a70, 1.6, 0.25);
+    const plateMat = choirMaterial(0x6a7a70, 1.1, 0.25, 0.8);
     this.mats.push(plateMat);
     for (let i = 0; i < 18; i++) {
       const a = (i / 18) * Math.PI * 2;
@@ -82,7 +82,7 @@ export class ChoirBoss {
       this.group.add(p);
     }
     // tendrils to walls / ceiling
-    const tMat = choirMaterial(0x34403c, 1.3, 0.18);
+    const tMat = choirMaterial(0x34403c, 0.7, 0.18, 0.28);
     this.mats.push(tMat);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
@@ -90,7 +90,7 @@ export class ChoirBoss {
       const end = new THREE.Vector3(c.x + Math.cos(a) * r, Math.random() < 0.5 ? 0 : 7 + Math.random() * 3, c.z + Math.sin(a) * r);
       const mid = c.clone().lerp(end, 0.5).add(new THREE.Vector3((Math.random() - 0.5) * 4, 3 + Math.random() * 3, (Math.random() - 0.5) * 4));
       const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(c.x, 3, c.z), mid, end]);
-      const tg = new THREE.TubeGeometry(curve, 24, 0.28 + Math.random() * 0.3, 7, false);
+      const tg = new THREE.TubeGeometry(curve, 24, 0.2 + Math.random() * 0.22, 7, false);
       const t = new THREE.Mesh(tg, tMat);
       this.tendrils.push(t); this.group.add(t);
     }
