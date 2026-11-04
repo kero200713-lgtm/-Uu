@@ -28,6 +28,8 @@
 * **Optimizasyon:** prop'lar tek materyalli vertex-color paketler ve 16 m'lik chunk'lara birleştirilir; ağaçlar için mesafe LOD'u; düşmanlar için düşük poligonlu gövde; uzak düşmanlarda AI/animasyon seyreltme; bölge geçişinde GPU texture boşaltma; dinamik çözünürlük; 3 kalite kademesi (render ölçeği, MSAA, post-process, bloom, gölge, ışık sayısı, çizim mesafesi, parçacık yoğunluğu, texture çözünürlüğü).
 * **Ses:** Web Audio; audio sprite, rastgele perde/ses varyasyonu, HRTF, duvar arkası boğuklaştırma (oklüzyon), prosedürel rüzgâr/oda tonu/drone/kalp atışı, dinamik müzik (keşif sessizliği, güvenli oda, kovalama, boss, final).
 
+Tasarım ayrıntıları (bölgeler, düşmanlar, ekonomi, zorluk eğrisi, teknik bütçe): [`docs/GDD.md`](docs/GDD.md).
+
 ## Çalıştırma
 ```bash
 npm install
@@ -49,10 +51,12 @@ Chromium + Playwright ile otomatik oynanış testleri (dokunmatik emülasyonu):
 ```bash
 npm run build
 node tests/flow.mjs            # toplama, nişan+ateş, düşman saldırısı, envanter, belge, kayıt→yenile→devam
-S=areas node tests/playtest.mjs # tüm bölgeleri yükle, ekran görüntüsü + çizim istatistikleri
+node tests/story.mjs           # oyunun baştan sona otomatik oynanışı (tüm bulmacalar, boss, final, krediler)
+S=areas Q=low node tests/playtest.mjs # tüm bölgeleri yükle (Q=low|medium|high), ekran görüntüsü + çizim istatistikleri
 node tests/playtest.mjs        # orman turu + joystick testi
 ```
-Çıktılar `tests/out/` klasörüne yazılır.
+Çıktılar `tests/out/` klasörüne yazılır. Başka bir derleme klasörünü test etmek için `DIST=<klasör>` verilebilir.
+`node tests/hair.mjs long` Ela'nın saç/ceket yakın planlarını çeker.
 
 ## Klasör yapısı
 ```

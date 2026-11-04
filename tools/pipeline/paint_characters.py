@@ -174,7 +174,7 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
     grime = F(9, 5, 13)
     clothes_total = np.zeros((H, Wd), np.float32)
 
-    def apply_cloth(mask, base, rough_v, pattern=None, stretch=0.65):
+    def apply_cloth(mask, base, rough_v, pattern=None, stretch=0.28):
         nonlocal alb, rough, nmap, clothes_total
         c = np.broadcast_to(base, alb.shape).copy() if base.ndim == 1 else base
         c = c * (0.82 + 0.3 * fab_mid[..., None]) * (0.92 + 0.12 * fab_fine[..., None])
@@ -185,8 +185,24 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
         rough = mix(rough[..., None], np.full_like(rough[..., None], rough_v), mask)[..., 0]
         # flatten sculpt normals under fabric, add fabric bump
         fn = np.stack([0.5 + (fab_fine - 0.5) * 0.18, 0.5 + (F(170, 2, 31) - 0.5) * 0.18, np.ones_like(fab_fine)], -1)
-        nmap = mix(nmap, mix(fn, nmap, np.full_like(mask, 0.25)), mask)
+        nmap = mix(nmap, mix(fn, nmap, np.full_like(mask, 0.08)), mask)
         clothes_total = np.maximum(clothes_total, mask)
+
+    def scalp(color_hex, strength=1.0):
+        """Paints the scalp under the hair mesh with hair colour so gaps between
+        hair cards never show bare skin (the 'bald patch' look)."""
+        nonlocal alb, rough, nmap
+        head = smooth(0.35, 0.6, M['head'])
+        # hairline: high on the forehead, low at the nape, blended around the sides
+        k = smooth(-0.03, 0.07, z)
+        line = (B.y_head - 0.03) * (1 - k) + (B.y_head + 0.095) * k
+        m = smooth(line, line + 0.025, y) * head * strength
+        strands = 0.75 + 0.35 * fbm(P * np.array([90.0, 14.0, 90.0], np.float32), 1.0, 3, 91).reshape(H, Wd)
+        base = col(color_hex)
+        c = base[None, None, :] * strands[..., None]
+        alb = mix(alb, c, np.clip(m, 0, 1))
+        rough = mix(rough[..., None], np.full_like(rough[..., None], 0.7), m)[..., 0]
+        nmap = mix(nmap, np.stack([0.5 + (strands - 1) * 0.3, np.full_like(strands, 0.5), np.ones_like(strands)], -1), m * 0.8)
 
     def dirt(amount, low_bias=1.0):
         nonlocal alb, rough
@@ -244,7 +260,7 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
         jacket *= (1 - M['hand'])
         collar_cut = smooth(B.y_neck + 0.03, B.y_neck - 0.02, y)
         jacket *= collar_cut
-        jc = col('#6a5e44')
+        jc = col('#3f4a37')
         zipper = np.exp(-((x / 0.006) ** 2)) * front * (y > B.y_pelvis) * (y < B.y_neck)
         pockets = ((np.abs(ax - 0.09) < 0.055) & (np.abs(y - (B.y_pelvis + 0.12)) < 0.05) & (z > 0.02)).astype(np.float32)
         seam = 1 - 0.35 * (np.abs(((ax - 0.09) / 0.055)) > 0.92) * pockets - 0.3 * np.clip(pockets * (np.abs((y - (B.y_pelvis + 0.12)) / 0.05) > 0.9), 0, 1)
@@ -253,7 +269,7 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
         apply_cloth(jacket, jc, 0.78, pattern)
         alb = mix(alb, np.array([0.55, 0.5, 0.42], np.float32), zipper * jacket * 0.6)
         # pants
-        pc = col('#34425a')
+        pc = col('#2a3446')
         knee = np.exp(-(((y - B.y_calf - 0.02) / 0.04) ** 2)) * front
         apply_cloth(np.clip(pants * (1 - jacket * 0.0), 0, 1), pc, 0.85, 1 - 0.18 * knee)
         belt = M['leg'] * smooth(B.y_pelvis + 0.02, B.y_pelvis + 0.035, y) * smooth(B.y_pelvis + 0.09, B.y_pelvis + 0.07, y)
@@ -261,13 +277,14 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
         apply_cloth(boots, col('#4a3020'), 0.55, 1 - 0.25 * smooth(B.y_foot - 0.04, B.y_foot - 0.07, y))
         # scarf / collar band at the neck
         scarf = smooth(B.y_neck - 0.06, B.y_neck - 0.02, y) * smooth(B.y_neck + 0.07, B.y_neck + 0.03, y) * (1 - M['head'] * 0.5) * smooth(0.13, 0.09, ax) * (1 - M['arm'])
-        apply_cloth(scarf, col('#7a2a24'), 0.9)
+        apply_cloth(scarf, col('#3b4a44'), 0.9)
         # gloves (fingerless) on palm area
         glove = M['hand'] * smooth(B.x_hand + 0.07, B.x_hand + 0.05, ax)
         apply_cloth(glove, col('#1c1a18'), 0.6)
         # face: slightly tired, a little grime
         dirt(0.35, 0.8)
         alb = mix(alb, alb * 0.92, M['head'] * smooth(0.6, 0.8, F(30, 3, 70)) * 0.4)
+        scalp('#2a1a10')
     else:
         if variant in ('hollow_miner', 'hollow_town', 'husk', 'listener'):
             zombie_skin(np.array([0.78, 0.82, 0.76], np.float32), 0.72 if variant != 'listener' else 0.9, 1.0)
@@ -295,6 +312,7 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
             apply_cloth(pants * (1 - tears * 0.6), col('#2f3b4f'), 0.85)
             apply_cloth(boots, col('#2a2420'), 0.6)
             dirt(0.9)
+            scalp('#3e3833', 0.9)
             hum_growth(np.clip(neck_back + ears * 1.5, 0, 1), 0.85, 64)
             blood(np.clip(shirt * front + M['head'] * front * (y < B.y_head), 0, 1), 1.0)
         elif variant == 'hollow_nurse':
@@ -303,6 +321,7 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
             apply_cloth(pants * (1 - tears * 0.5), col('#6f918f'), 0.82)
             apply_cloth(boots, col('#bdbdb5'), 0.6)
             dirt(0.7)
+            scalp('#231a14')
             hum_growth(np.clip(neck_back + ears * 1.5 + spine_line * 0.3, 0, 1), 0.9, 66)
             blood(np.clip(top * 0.7 + M['hand'] + M['head'] * front * (y < B.y_head), 0, 1), 1.1)
         elif variant == 'lurker':
@@ -311,6 +330,7 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
             dots = (((np.floor(x * 40 + 100) + np.floor(y * 40)) % 3) == 0).astype(np.float32) * 0.08
             apply_cloth(gown * (1 - tears * 0.9), col('#9aa3a6'), 0.9, 1 - dots)
             dirt(0.8)
+            scalp('#17120e')
             alb = alb * 0.88
             hum_growth(np.clip(neck_back + ears * 2 + spine_line + M['arm'] * 0.25, 0, 1), 1.0, 67)
             blood(np.clip(gown * 0.5 + M['hand'] + M['head'] * front, 0, 1), 1.1)

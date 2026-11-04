@@ -4,7 +4,7 @@
 import { chromium } from 'playwright';
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
-const ROOT = path.resolve('dist');
+const ROOT = path.resolve(process.env.DIST || 'dist');
 const OUT = path.resolve('tests/out');
 fs.mkdirSync(OUT, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.mp3': 'audio/mpeg', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain' };

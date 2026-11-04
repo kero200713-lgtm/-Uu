@@ -62,18 +62,7 @@ export async function createHuman(o: HumanOpts): Promise<Human> {
   });
   if (!body) body = meshes[0];
   const skeleton = body.skeleton;
-  if (o.hair) {
-    const hg = await assets.loadGLTF(`models/characters/hair_${o.hair}.glb`);
-    hg.scene.traverse((n: any) => {
-      if (!n.isSkinnedMesh) return;
-      const bones = n.skeleton.bones.map((b: THREE.Bone) => skeleton.bones.find((x) => x.name === b.name) || skeleton.bones[0]);
-      const hm = new THREE.SkinnedMesh(n.geometry, hairMaterial(n.material, o.hairColor ?? 0x2a1d14));
-      hm.bind(new THREE.Skeleton(bones, n.skeleton.boneInverses), n.bindMatrix);
-      hm.castShadow = o.shadow !== false;
-      hm.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.6, 0), 1.0);
-      model.add(hm); meshes.push(hm);
-    });
-  }
+  if (o.hair) for (const hm of await buildHair(skeleton, o.hair, o.hairColor ?? 0x2a1d14, o.shadow !== false)) { model.add(hm); meshes.push(hm); }
   if (o.boneScale) {
     for (const b of skeleton.bones) {
       const s = o.boneScale[b.name];
@@ -86,6 +75,32 @@ export async function createHuman(o: HumanOpts): Promise<Human> {
   model.rotation.y = Math.PI;
   if (o.scale) model.scale.setScalar(o.scale);
   return { root, model, meshes, body, bodyMat, skeleton };
+}
+
+/** Binds a hair mesh (rigged to the same skeleton) to an existing character. */
+export async function buildHair(skeleton: THREE.Skeleton, hair: string, color: number, shadow: boolean): Promise<THREE.SkinnedMesh[]> {
+  const out: THREE.SkinnedMesh[] = [];
+  const hg = await assets.loadGLTF(`models/characters/hair_${hair}.glb`);
+  hg.scene.traverse((n: any) => {
+    if (!n.isSkinnedMesh) return;
+    const bones = n.skeleton.bones.map((b: THREE.Bone) => skeleton.bones.find((x) => x.name === b.name) || skeleton.bones[0]);
+    const hm = new THREE.SkinnedMesh(n.geometry, hairMaterial(n.material, color));
+    hm.bind(new THREE.Skeleton(bones, n.skeleton.boneInverses), n.bindMatrix);
+    hm.castShadow = shadow;
+    hm.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.6, 0), 1.0);
+    hm.userData.hair = true;
+    out.push(hm);
+  });
+  return out;
+}
+
+/** Replaces a character's hair (used by the player setup and debug tools). */
+export async function setHair(h: Human, hair: string | null, color: number) {
+  const old = h.meshes.filter((m) => m.userData.hair);
+  for (const m of old) { m.parent?.remove(m); }
+  h.meshes = h.meshes.filter((m) => !m.userData.hair);
+  if (!hair) return;
+  for (const hm of await buildHair(h.skeleton, hair, color, true)) { h.model.add(hm); h.meshes.push(hm); }
 }
 
 function hairMaterial(src: THREE.MeshStandardMaterial, tint: number) {

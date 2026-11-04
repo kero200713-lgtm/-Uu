@@ -15,7 +15,149 @@ import type { Level } from '../world/Level';
 import type { PlayerLike } from '../core/World';
 import type { QualityPreset } from '../core/Quality';
 
-type PState = 'normal' | 'reload' | 'melee' | 'shoot' | 'heal' | 'interact' | 'hurt' | 'down' | 'grabbed' | 'dead' | 'locked' | 'throw';
+const sstep = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/**
+ * Removes anatomical detail (chest, abdominal and back muscles) under the
+ * jacket with Taubin smoothing on a position-welded copy of the body, so the
+ * painted clothing reads as a garment rather than skin. Normals are rebuilt
+ * from the smoothed surface and blended in by the same mask.
+ */
+function smoothGarment(geo: THREE.BufferGeometry, P: THREE.BufferAttribute, Nrm: THREE.BufferAttribute) {
+  const N = P.count;
+  const group = new Int32Array(N);
+  const keys = new Map<string, number>();
+  const gp: number[] = [];
+  for (let i = 0; i < N; i++) {
+    const k = `${Math.round(P.getX(i) * 4000)},${Math.round(P.getY(i) * 4000)},${Math.round(P.getZ(i) * 4000)}`;
+    let g = keys.get(k);
+    if (g === undefined) { g = gp.length / 3; keys.set(k, g); gp.push(P.getX(i), P.getY(i), P.getZ(i)); }
+    group[i] = g;
+  }
+  const G = gp.length / 3;
+  const adj: Set<number>[] = Array.from({ length: G }, () => new Set<number>());
+  const idx = geo.index!.array;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = group[idx[t]], b = group[idx[t + 1]], c = group[idx[t + 2]];
+    adj[a].add(b); adj[a].add(c); adj[b].add(a); adj[b].add(c); adj[c].add(a); adj[c].add(b);
+  }
+  // garment mask in bind pose (female rig: pelvis ~0.93 m, neck ~1.48 m, shoulders |x|~0.15)
+  const w = new Float32Array(G);
+  for (let g = 0; g < G; g++) {
+    const x = Math.abs(gp[g * 3]), y = gp[g * 3 + 1];
+    const torso = sstep(0.85, 0.9, y) * sstep(1.44, 1.38, y) * sstep(0.22, 0.17, x); // jacket hem ~0.87 m
+    const arm = sstep(0.17, 0.22, x) * sstep(0.6, 0.55, x) * sstep(1.3, 1.35, y) * 0.35;
+    w[g] = Math.max(torso, arm);
+  }
+  let cur = Float32Array.from(gp);
+  drapeFront(cur, w, 1, 0.96, 0.3);  // front: chest falls straight
+  drapeFront(cur, w, -1, 0.86, 0);   // back: hangs from the shoulder blades over the seat
+  const next = new Float32Array(cur.length);
+  for (let it = 0; it < 40; it++) {
+    const f = it % 2 === 0 ? 0.6 : -0.62; // Taubin lambda/mu: smooths without shrinking
+    for (let g = 0; g < G; g++) {
+      const wg = w[g];
+      if (wg <= 0 || adj[g].size === 0) { next[g * 3] = cur[g * 3]; next[g * 3 + 1] = cur[g * 3 + 1]; next[g * 3 + 2] = cur[g * 3 + 2]; continue; }
+      let sx = 0, sy = 0, sz = 0;
+      for (const o of adj[g]) { sx += cur[o * 3]; sy += cur[o * 3 + 1]; sz += cur[o * 3 + 2]; }
+      const c = adj[g].size;
+      next[g * 3] = cur[g * 3] + wg * f * (sx / c - cur[g * 3]);
+      next[g * 3 + 1] = cur[g * 3 + 1] + wg * f * (sy / c - cur[g * 3 + 1]);
+      next[g * 3 + 2] = cur[g * 3 + 2] + wg * f * (sz / c - cur[g * 3 + 2]);
+    }
+    cur.set(next);
+  }
+  // group normals from the smoothed surface
+  const gn = new Float32Array(G * 3);
+  const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = group[idx[t]], b = group[idx[t + 1]], c = group[idx[t + 2]];
+    va.fromArray(cur, a * 3); vb.fromArray(cur, b * 3); vc.fromArray(cur, c * 3);
+    e1.subVectors(vb, va); e2.subVectors(vc, va); e1.cross(e2);
+    for (const g of [a, b, c]) { gn[g * 3] += e1.x; gn[g * 3 + 1] += e1.y; gn[g * 3 + 2] += e1.z; }
+  }
+  const pos = new Float32Array(N * 3), nor = new Float32Array(N * 3);
+  const nv = new THREE.Vector3(), on = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    const g = group[i];
+    pos[i * 3] = cur[g * 3]; pos[i * 3 + 1] = cur[g * 3 + 1]; pos[i * 3 + 2] = cur[g * 3 + 2];
+    on.set(Nrm.getX(i), Nrm.getY(i), Nrm.getZ(i));
+    nv.set(gn[g * 3], gn[g * 3 + 1], gn[g * 3 + 2]).normalize();
+    if (nv.dot(on) < 0) nv.negate();
+    on.lerp(nv, w[g]).normalize();
+    nor[i * 3] = on.x; nor[i * 3 + 1] = on.y; nor[i * 3 + 2] = on.z;
+  }
+  return { p: new THREE.BufferAttribute(pos, 3), n: new THREE.BufferAttribute(nor, 3) };
+}
+
+/**
+ * Fabric bridges the body's concavities: per vertical strip of the torso (front or back) the
+ * side profile is replaced by its upper convex hull (so the jacket falls straight
+ * from the chest), and the bust bump above the hull's chord is softened.
+ */
+function drapeFront(cur: Float32Array, w: Float32Array, side: 1 | -1, Y0: number, flatten: number) {
+  const G = cur.length / 3, BX = 0.02, KX = 7, NB = KX * 2 + 1;
+  const Y1 = 1.44, BY = 0.01, NY = Math.round((Y1 - Y0) / BY) + 1;
+  const zmax = new Float32Array(NB * NY).fill(-1);
+  for (let g = 0; g < G; g++) {
+    const x = cur[g * 3], y = cur[g * 3 + 1], z = cur[g * 3 + 2] * side;
+    if (z <= 0) continue;
+    const k = Math.round(x / BX) + KX, j = Math.round((y - Y0) / BY);
+    if (k < 0 || k >= NB || j < 0 || j >= NY) continue;
+    if (z > zmax[k * NY + j]) zmax[k * NY + j] = z;
+  }
+  const disp = new Float32Array(NB * NY), prof = new Float32Array(NB * NY);
+  for (let k = 0; k < NB; k++) {
+    const row = zmax.subarray(k * NY, k * NY + NY);
+    const pts: number[] = [];
+    for (let j = 0; j < NY; j++) if (row[j] > 0) pts.push(j);
+    if (pts.length < 4) continue;
+    // fill empty bins
+    for (let j = 0; j < NY; j++) if (row[j] <= 0) {
+      let a = -1, b = -1;
+      for (const q of pts) { if (q < j) a = q; else if (b < 0) b = q; }
+      row[j] = a < 0 ? row[b] : b < 0 ? row[a] : row[a] + (row[b] - row[a]) * (j - a) / (b - a);
+    }
+    // upper hull of (j, z)
+    const hull: number[] = [];
+    for (let j = 0; j < NY; j++) {
+      while (hull.length >= 2) {
+        const a = hull[hull.length - 2], b = hull[hull.length - 1];
+        if ((b - a) * (row[j] - row[a]) - (j - a) * (row[b] - row[a]) >= 0) hull.pop(); else break;
+      }
+      hull.push(j);
+    }
+    for (let h = 0; h < hull.length - 1; h++) {
+      const a = hull[h], b = hull[h + 1];
+      for (let j = a; j <= b; j++) prof[k * NY + j] = row[a] + (row[b] - row[a]) * (j - a) / Math.max(1, b - a);
+    }
+    const h0 = prof[k * NY], h1 = prof[k * NY + NY - 1];
+    for (let j = 0; j < NY; j++) {
+      const H = prof[k * NY + j], L = h0 + (h1 - h0) * j / (NY - 1);
+      const P = H - (H - L) * flatten;
+      disp[k * NY + j] = Math.max(-0.035, Math.min(0.035, P - row[j]));
+      prof[k * NY + j] = row[j];
+    }
+  }
+  const at = (a: Float32Array, x: number, y: number) => {
+    const fx = Math.max(0, Math.min(NB - 1.001, x / BX + KX)), fy = Math.max(0, Math.min(NY - 1.001, (y - Y0) / BY));
+    const k = Math.floor(fx), j = Math.floor(fy), tx = fx - k, ty = fy - j;
+    const v = (kk: number, jj: number) => a[kk * NY + jj];
+    return (v(k, j) * (1 - tx) + v(k + 1, j) * tx) * (1 - ty) + (v(k, j + 1) * (1 - tx) + v(k + 1, j + 1) * tx) * ty;
+  };
+  for (let g = 0; g < G; g++) {
+    const x = cur[g * 3], y = cur[g * 3 + 1], z = cur[g * 3 + 2] * side;
+    if (z <= 0 || y < Y0 || y > Y1 || Math.abs(x) > 0.14) continue;
+    const front = at(prof, x, y);
+    if (front <= 0) continue;
+    const wt = sstep(0.1, 0.13, Math.abs(x)) * sstep(Y0, Y0 + 0.04, y) * sstep(Y1, Y1 - 0.04, y) * sstep(0.35, 0.85, z / front);
+    if (wt <= 0) continue;
+    cur[g * 3 + 2] = (z + at(disp, x, y) * wt) * side;
+    w[g] = Math.max(w[g], wt);
+  }
+}
+
+type PState ='normal' | 'reload' | 'melee' | 'shoot' | 'heal' | 'interact' | 'hurt' | 'down' | 'grabbed' | 'dead' | 'locked' | 'throw';
 
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
@@ -60,7 +202,7 @@ export class Player implements PlayerLike {
   }
 
   async init(scene: THREE.Scene) {
-    this.human = await createHuman({ sex: 'f', variant: 'player', hair: 'buns', hairColor: 0x2b1b12, eyes: 'normal', glow: 0 });
+    this.human = await createHuman({ sex: 'f', variant: 'player', hair: 'long', hairColor: 0x2b1b12, eyes: 'normal', glow: 0 });
     this.inflateClothes(this.human.body);
     this.human.bodyMat.color.setScalar(1.12); // keep Ela readable in very dark scenes
     this.root.add(this.human.root);
@@ -93,20 +235,31 @@ export class Player implements PlayerLike {
   /** Gives painted clothes some thickness so they read as garments, not skin. */
   private inflateClothes(mesh: THREE.SkinnedMesh) {
     const geo = mesh.geometry;
-    const p = geo.attributes.position as THREE.BufferAttribute, n = geo.attributes.normal as THREE.BufferAttribute;
+    const raw = geo.attributes.position as THREE.BufferAttribute, n0 = geo.attributes.normal as THREE.BufferAttribute;
+    // Compressed meshes are stored in a normalised frame (quantisation is folded into
+    // the inverse bind matrices). Map to the known bind-pose frame in metres
+    // (female base body: y -0.008..1.767, z -0.162..0.14), work there, map back.
+    let mnY = Infinity, mxY = -Infinity, mnZ = Infinity;
+    for (let i = 0; i < raw.count; i++) { const y = raw.getY(i); if (y < mnY) mnY = y; if (y > mxY) mxY = y; mnZ = Math.min(mnZ, raw.getZ(i)); }
+    const s = 1.775 / (mxY - mnY), oy = -0.008 - mnY * s, oz = -0.162 - mnZ * s;
+    const bind = new Float32Array(raw.count * 3);
+    for (let i = 0; i < raw.count; i++) { bind[i * 3] = raw.getX(i) * s; bind[i * 3 + 1] = raw.getY(i) * s + oy; bind[i * 3 + 2] = raw.getZ(i) * s + oz; }
+    const { p, n } = smoothGarment(geo, new THREE.BufferAttribute(bind, 3), n0);
     const arr = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = Math.abs(x);
       let k = 0;
-      if (y > 0.98 && y < 1.47 && ax < 0.6) k = 0.014;           // jacket torso + arms
+      if (y > 0.885 && y < 1.47 && ax < 0.6) k = 0.014;          // jacket torso + arms (hem ~0.87 m)
       if (y > 1.36 && y < 1.47 && ax > 0.17 && ax < 0.58) k = 0.012;
-      if (y < 0.98 && y > 0.17) k = 0.007;                         // trousers
+      if (y <= 0.885 && y > 0.17) k = 0.007;                       // trousers
       if (y <= 0.17) k = 0.011;                                    // boots
       if (y > 1.4 && ax < 0.08 && z > 0) k = 0;                    // neck/collar opening
-      arr[i * 3] = x + n.getX(i) * k; arr[i * 3 + 1] = y + n.getY(i) * k; arr[i * 3 + 2] = z + n.getZ(i) * k;
+      // back to the mesh's own frame
+      arr[i * 3] = (x + n.getX(i) * k) / s; arr[i * 3 + 1] = (y + n.getY(i) * k - oy) / s; arr[i * 3 + 2] = (z + n.getZ(i) * k - oz) / s;
     }
     const g2 = geo.clone();
     g2.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    g2.setAttribute('normal', n);
     g2.boundingSphere = geo.boundingSphere;
     mesh.geometry = g2;
   }

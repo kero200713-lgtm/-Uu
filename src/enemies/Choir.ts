@@ -29,7 +29,7 @@ function choirMaterial(base: number, veinStrength: number, amp: number, freq = 1
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', `#include <common>\nuniform float uTime; uniform float uDissolve; uniform float uPulse; uniform float uVein; uniform float uFreq; varying vec3 vObj;\n${NOISE_GLSL}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n float dn = fbm3(vObj * 0.8);\n if (dn < uDissolve * 1.1 - 0.05) discard;\n diffuseColor.rgb *= 0.7 + 0.5 * fbm3(vObj * 2.5 * uFreq);`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n float v = 1.0 - abs(fbm3(vObj * 3.2 * uFreq + vec3(uTime * 0.05)) - 0.5) * 2.0;\n float vein = smoothstep(0.9, 0.99, v) * uVein * 0.8;\n float edge = smoothstep(uDissolve * 1.1 - 0.05, uDissolve * 1.1 + 0.08, dn);\n totalEmissiveRadiance *= vein * (0.6 + 0.4 * sin(uTime * 3.0 - vObj.y * 1.5) + uPulse * 2.0);\n totalEmissiveRadiance += vec3(1.0, 0.9, 0.7) * (1.0 - edge) * step(0.001, uDissolve) * 3.0;`);
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n float v = 1.0 - abs(fbm3(vObj * 3.2 * uFreq + vec3(uTime * 0.05)) - 0.5) * 2.0;\n float aa = fwidth(v);\n float vein = smoothstep(0.9 - aa, 0.99 + aa, v) * (0.09 / (0.09 + 2.0 * aa)) * uVein * 0.8;\n float edge = smoothstep(uDissolve * 1.1 - 0.05, uDissolve * 1.1 + 0.08, dn);\n totalEmissiveRadiance *= vein * (0.6 + 0.4 * sin(uTime * 3.0 - vObj.y * 1.5) + uPulse * 2.0);\n totalEmissiveRadiance += vec3(1.0, 0.9, 0.7) * (1.0 - edge) * step(0.001, uDissolve) * 3.0;`);
   };
   m.customProgramCacheKey = () => 'choir';
   return m;
@@ -61,7 +61,7 @@ export class ChoirBoss {
   async init() {
     const c = this.center;
     // core mass
-    const coreMat = choirMaterial(0x41504a, 1, 0.9);
+    const coreMat = choirMaterial(0x41504a, 1.15, 0.9, 0.38);
     this.mats.push(coreMat);
     const geo = new THREE.IcosahedronGeometry(4.2, 5);
     geo.scale(1, 1.25, 1);
@@ -70,7 +70,7 @@ export class ChoirBoss {
     this.core.castShadow = false; this.core.receiveShadow = true;
     this.group.add(this.core);
     // gill plates around the core (it "listens")
-    const plateMat = choirMaterial(0x6a7a70, 1.1, 0.25, 0.8);
+    const plateMat = choirMaterial(0x6a7a70, 1.1, 0.25, 0.55);
     this.mats.push(plateMat);
     for (let i = 0; i < 18; i++) {
       const a = (i / 18) * Math.PI * 2;

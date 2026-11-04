@@ -10,7 +10,7 @@ const ZV = { idle: ['z_moan', 'z_call'], alert: 'z_growl', attack: 'z_attack', h
 const HOLLOW_VARIANTS: Record<string, Partial<EnemyTuning['human']>> = {
   miner: { sex: 'm', variant: 'hollow_miner', hair: null },
   town: { sex: 'm', variant: 'hollow_town', hair: 'buzzed', hairColor: 0x4a4440 },
-  nurse: { sex: 'f', variant: 'hollow_nurse', hair: 'long', hairColor: 0x2a221c },
+  nurse: { sex: 'f', variant: 'hollow_nurse', hair: 'buns', hairColor: 0x2a221c },
 };
 
 export function hollowTuning(variant = 'town'): EnemyTuning {

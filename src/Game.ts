@@ -13,7 +13,7 @@ import { shared } from './world/Materials';
 import { BLOCK_SIGHT } from './world/Grid';
 import { Player } from './player/Player';
 import { CameraRig } from './player/CameraRig';
-import { preloadHumans } from './player/CharacterFactory';
+import { preloadHumans, setHair } from './player/CharacterFactory';
 import { EnemyManager } from './enemies/Types';
 import { FX } from './combat/FX';
 import { noise } from './combat/Noise';
@@ -348,6 +348,14 @@ export class Game implements World {
     this.rig.yaw = (yawDeg * Math.PI) / 180; this.rig.pitch = pitch; this.rig.dist = 2.4;
   }
   findFocusPublic() { return this.findFocus(); }
+  /** Debug: swap the player's hairstyle and frame a close-up of the head. */
+  async debugHair(name: string | null, color = 0x2b1b12) { await setHair(this.player.human, name, color); }
+  debugCloseUp(angleDeg: number, height = 0.35, dist = 0.9) {
+    const head = this.player.anim.bone('Head')!.getWorldPosition(new THREE.Vector3());
+    const a = (angleDeg * Math.PI) / 180;
+    const pos = head.clone().add(new THREE.Vector3(Math.sin(a) * dist, height, Math.cos(a) * dist));
+    this.rig.cinematic = { pos, look: head.clone().add(new THREE.Vector3(0, 0.05, 0)), w: 1 };
+  }
   debugGive(id: string, n = 1) { this.player.inv.add(id, n); if (ITEMS[id]?.kind === 'weapon') { this.player.inv.mags[id] = ITEMS[id].weapon!.mag; this.player.equip(id); } }
   frameStats() {
     const i = this.engine.renderer.info;
