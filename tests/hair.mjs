@@ -1,5 +1,5 @@
 // Close-up head renders of the player for hair checks: node tests/hair.mjs buns,long
-import { chromium } from 'playwright';
+import { chromium } from './pw.mjs';
 import http from 'http'; import fs from 'fs'; import path from 'path';
 const ROOT = path.resolve(process.env.DIST || 'dist');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.mp3': 'audio/mpeg', '.woff2': 'font/woff2' };

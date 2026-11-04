@@ -1,6 +1,6 @@
 // End-to-end progression test: walks the critical path through all six areas
 // using the real interaction system (teleporting between interaction points).
-import { chromium } from 'playwright';
+import { chromium } from './pw.mjs';
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const ROOT = path.resolve(process.env.DIST || 'dist'); const OUT = path.resolve('tests/out'); fs.mkdirSync(OUT, { recursive: true });

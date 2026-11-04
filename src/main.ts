@@ -3,6 +3,7 @@ import { settings } from './core/Settings';
 import { bus } from './core/Events';
 import { audio } from './audio/AudioEngine';
 import { Game } from './Game';
+import { initNative, attachNative, isNative } from './platform/Native';
 
 settings.load();
 document.documentElement.lang = settings.data.language;
@@ -49,7 +50,11 @@ async function start() {
     hint.classList.add('err');
     return;
   }
+  // native app: restore saves/settings mirrored in the OS store before anything reads them
+  if (await initNative()) { settings.load(); document.documentElement.lang = settings.data.language; }
   game = new Game(canvas, ui);
+  const g = game;
+  attachNative({ back: () => g.handleBack(), background: (hidden) => g.onBackground(hidden) });
   await game.boot((p) => { fill.style.transform = `scaleX(${Math.max(0.05, p)})`; });
   const boot = document.getElementById('boot')!;
   boot.classList.add('done');
@@ -75,7 +80,8 @@ if ('serviceWorker' in navigator && debug) {
   // ?debug: always fetch fresh files from the server
   navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
 }
-if ('serviceWorker' in navigator && import.meta.env.PROD && !debug) {
+// the native app ships its files locally: no service worker there
+if ('serviceWorker' in navigator && import.meta.env.PROD && !debug && !isNative) {
   window.addEventListener('load', () => {
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;

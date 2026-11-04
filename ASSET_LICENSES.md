@@ -19,6 +19,7 @@ recorded below only so their origin stays traceable.
 | **Special Elite** font | Astigmatic (Brian J. Bonislawsky) via Google Fonts | Apache License 2.0 | Include the licence text with redistributions | `public/assets/fonts/LICENSE-SpecialElite.txt`; Credits → Licences |
 | **three.js** r170 (engine library, bundled) | three.js authors — https://threejs.org | MIT | Keep the copyright + permission notice with copies of the software | `public/licenses.txt`; Credits → Licences |
 | **meshoptimizer decoder** (bundled via three.js addons) | Arseny Kapoulkine | MIT | Same as above | `public/licenses.txt` |
+| **Capacitor** 8 runtime + plugins (app, haptics, preferences, splash-screen, status-bar) — native Android/iOS shell | Drifty Co. / Ionic — https://capacitorjs.com | MIT | Same as above | `public/licenses.txt`; Credits → Licences |
 
 Fonts were subset to Latin + Latin Extended-A (Turkish glyphs) and converted to
 WOFF2. Under the OFL this is a "Modified Version"; the reserved font names are

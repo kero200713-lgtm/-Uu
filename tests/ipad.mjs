@@ -4,7 +4,7 @@
 // menu tap -> new game -> joystick walk + simultaneous camera drag -> buttons
 // (flashlight, inventory, pause/resume) -> rotate to portrait and back.
 //   node tests/ipad.mjs            (DIST=<dir> to test another build)
-import { chromium, devices } from 'playwright';
+import { chromium, devices } from './pw.mjs';
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const ROOT = path.resolve(process.env.DIST || 'dist'); const OUT = path.resolve('tests/out'); fs.mkdirSync(OUT, { recursive: true });

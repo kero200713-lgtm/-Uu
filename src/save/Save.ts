@@ -1,3 +1,4 @@
+import { persist, forget } from '../platform/Native';
 export interface SaveData {
   v: number;
   kind: 'manual' | 'auto';
@@ -30,7 +31,7 @@ export const Save = {
     const data: SaveData = { ...d, v: VERSION, time: Date.now() };
     const body = JSON.stringify(data);
     const wrapped = JSON.stringify({ ...data, checksum: checksum(body) });
-    try { localStorage.setItem(KEYS[d.kind], wrapped); return true; } catch { return false; }
+    return persist(KEYS[d.kind], wrapped);
   },
   read(kind: 'manual' | 'auto'): SaveData | null {
     try {
@@ -47,5 +48,5 @@ export const Save = {
     if (a && b) return a.time >= b.time ? a : b;
     return a || b;
   },
-  clear() { try { localStorage.removeItem(KEYS.manual); localStorage.removeItem(KEYS.auto); } catch { /* ignore */ } },
+  clear() { forget(KEYS.manual); forget(KEYS.auto); },
 };

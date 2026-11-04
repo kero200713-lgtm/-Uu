@@ -1,6 +1,6 @@
 # Web sürümü ve iPad'de test
 
-Oyun bir web uygulamasıdır: `npm run build` → `dist/` klasörü herhangi bir **ücretsiz statik sunucuda** yayınlanabilir ve iPad Safari'de doğrudan açılır. Hiçbir adım ücret gerektirmez.
+Asıl ürün Android ve iOS uygulamasıdır ([`NATIVE.md`](NATIVE.md)). Bu sayfa, aynı oyunun **yalnızca test için** kullanılan web sürümünü anlatır: `npm run build` → `dist/` klasörü ücretsiz bir statik sunucuda yayınlanır ve iPad Safari'de doğrudan açılır. Hiçbir adım ücret gerektirmez.
 
 ## Seçenek A — GitHub Pages (önerilen, tamamen ücretsiz)
 GitHub'ın ücretsiz planında Pages yalnızca **public (herkese açık)** depolarda çalışır. Bu depo şu an **private**.

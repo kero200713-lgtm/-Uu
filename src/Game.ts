@@ -135,14 +135,36 @@ export class Game implements World {
     });
     bus.on('language', () => { if (this.state === 'menu') this.showMenu(); else this.openSettings('language'); this.hud.objective(this.objectiveText(), false); });
     bus.on('quality', (q) => { this.q = q; });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        if (this.state === 'play') { this.pause(); }
-        if (this.canAutosave()) this.autosave(true);
-        audio.suspend(true);
-      } else audio.suspend(false);
-    });
+    document.addEventListener('visibilitychange', () => this.onBackground(document.hidden));
     window.addEventListener('pagehide', () => { if (this.canAutosave()) this.autosave(true); });
+  }
+
+  /** App/tab went to the background (or came back): pause, save, silence. */
+  onBackground(hidden: boolean) {
+    if (hidden) {
+      if (this.state === 'play') this.pause();
+      if (this.canAutosave()) this.autosave(true);
+      audio.suspend(true);
+    } else audio.suspend(false);
+  }
+
+  /**
+   * Hardware/system "back" (Android): closes the top panel, the inventory, or
+   * pauses/resumes play. Returns false when there is nothing to go back from
+   * (main menu), so the native shell can send the app to the background.
+   */
+  handleBack(): boolean {
+    if (this.state === 'inventory') { this.closeInventory(); return true; }
+    const panel = this.screens.current ? this.screens.root.lastElementChild as HTMLElement | null : null;
+    if (panel) {
+      for (const k of ['back', 'close', 'no', 'res']) {
+        const b = panel.querySelector<HTMLElement>(`[data-k=${k}]`);
+        if (b) { b.click(); return true; }
+      }
+    }
+    if (this.state === 'play') { this.pause(); return true; }
+    if (this.state === 'menu') return false;
+    return true; // cutscenes, death screen, loading: swallow
   }
 
   combatCtx(): CombatCtx {

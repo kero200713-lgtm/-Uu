@@ -3,6 +3,7 @@ import { settings } from '../core/Settings';
 import { bus } from '../core/Events';
 import { icon } from './Icons';
 import { audio } from '../audio/AudioEngine';
+import { vibrate } from '../platform/Native';
 
 interface Btn { el: HTMLElement; action: Action; toggle?: boolean }
 
@@ -58,7 +59,7 @@ export class TouchControls {
           input.press('fire');
         } else if (a === 'crouch') { input.press('crouch'); }
         else input.press(a);
-        if (settings.data.vibration && navigator.vibrate) navigator.vibrate(8);
+        if (settings.data.vibration) vibrate(8);
       });
       const up = (e: PointerEvent) => {
         el.classList.remove('down');

@@ -1,7 +1,7 @@
 // Automated play test: serves dist/, drives the game with emulated touch input,
 // captures screenshots + console errors + per-frame render stats.
 // usage: Q=medium S=forest node tests/playtest.mjs
-import { chromium } from 'playwright';
+import { chromium } from './pw.mjs';
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const ROOT = path.resolve(process.env.DIST || 'dist');

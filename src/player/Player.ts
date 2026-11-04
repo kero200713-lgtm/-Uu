@@ -14,6 +14,7 @@ import { settings } from '../core/Settings';
 import type { Level } from '../world/Level';
 import type { PlayerLike } from '../core/World';
 import type { QualityPreset } from '../core/Quality';
+import { vibrate } from '../platform/Native';
 
 const sstep = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -418,7 +419,7 @@ export class Player implements PlayerLike {
     this.recoil += w.recoil; this.spread = Math.min(0.08, this.spread + w.recoil * 0.4);
     rig.yaw += (Math.random() - 0.5) * w.recoil * 0.25;
     bus.emit('inv');
-    if (settings.data.vibration && navigator.vibrate) navigator.vibrate(w.type === 'shotgun' ? 45 : 18);
+    if (settings.data.vibration) vibrate(w.type === 'shotgun' ? 45 : 18);
   }
 
   startReload() {
@@ -505,7 +506,7 @@ export class Player implements PlayerLike {
     bus.emit('hp', this.hp, 'hit', amount);
     audio.play('p_hurt', { volume: 0.9, priority: 3 });
     audio.play('hit', { volume: 0.7 });
-    if (settings.data.vibration && navigator.vibrate) navigator.vibrate(60);
+    if (settings.data.vibration) vibrate(60);
     if (this.hp <= 0) { this.hp = 0; this.die(); return; }
     tmp.subVectors(this.pos, from).setY(0).normalize();
     this.vel.addScaledVector(tmp, opts.knock ? 4 : 1.6);

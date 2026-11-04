@@ -134,4 +134,5 @@ Grafik (Otomatik/Düşük/Orta/Yüksek, render ölçeği, dinamik çözünürlü
 * `node tests/story.mjs` — oyunun baştan sona otomatik oynanışı (zincir makası → sağlık ocağı → sigorta → maden → yakıt/jeneratör → asansör → tesis → kod → kaset → kuyu → KORO → 3 rezonatör → konsol → çöküş → kaçış → epilog → krediler).
 * `S=areas node tests/playtest.mjs` — altı bölgenin her kalite kademesinde yüklenmesi, ekran görüntüsü ve çizim istatistikleri.
 * `node tests/ipad.mjs` — iPad Pro 11 emülasyonu: GitHub Pages alt-yolu, çoklu dokunuş (joystick + kamera), butonlar, duraklatma, döndürme, service worker ile yeniden açılış.
+* `node tests/native.mjs` — Capacitor köprüsü taklidiyle native davranış: kayıtların işletim sistemi deposuna yedeklenmesi ve geri yüklenmesi, Android geri tuşu, arka plana geçiş.
 * `node tests/hair.mjs long` — Ela'nın yakın plan görüntüleri (saç/ceket kontrolü).

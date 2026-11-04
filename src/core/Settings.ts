@@ -1,4 +1,5 @@
 import { bus } from './Events';
+import { persist } from '../platform/Native';
 
 export type QualityLevel = 'low' | 'medium' | 'high';
 export interface SettingsData {
@@ -37,7 +38,7 @@ class SettingsStore {
     return this.data;
   }
   save() {
-    try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch { /* ignore */ }
+    persist(KEY, JSON.stringify(this.data));
   }
   set<K extends keyof SettingsData>(k: K, v: SettingsData[K]) {
     this.data[k] = v;

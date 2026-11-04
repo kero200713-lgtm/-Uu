@@ -8,6 +8,7 @@ import { noise } from '../combat/Noise';
 import { keypad, epilogue, creditsPanel } from '../ui/Screens';
 import { ChoirBoss } from '../enemies/Choir';
 import type { Interactable } from '../world/Level';
+import { persist } from '../platform/Native';
 
 type Fn = (g: Game, arg?: any) => void | Promise<void>;
 const tr = () => settings.data.language === 'tr';
@@ -239,7 +240,7 @@ export async function runEnding(g: Game) {
   audio.stopAll();
   audio.proc?.stopAllBeds(1);
   audio.playMusic('mus_ending', 2, false);
-  try { localStorage.setItem('ugultu_completed', '1'); } catch { /* */ }
+  persist('ugultu_completed', '1');
   const L = tr()
     ? ['Kuyudan çıktığımda şafak sökmüştü.', 'Yağmur durmuştu. Kuşlar vardı. Gerçek kuşlar.', 'Karaçam\'da ilk kez sessizlik, sadece sessizlikti.', 'Arabaya döndüğümde radyo kendi kendine açıldı.', '<b>"Ela... kapat onu."</b>', 'Bu kez ses babamın değildi.', 'Benimdi.']
     : ['When I climbed out of the shaft, dawn had broken.', 'The rain had stopped. There were birds. Real birds.', 'For the first time, silence in Karaçam was only silence.', 'When I got back to the car, the radio switched itself on.', '<b>"Ela... turn it off."</b>', 'This time the voice wasn\'t my father\'s.', 'It was mine.'];

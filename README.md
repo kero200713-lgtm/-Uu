@@ -1,6 +1,6 @@
 # UĞULTU
 
-**Mobil için üçüncü şahıs kameralı survival horror.** Three.js + TypeScript ile yazılmış, tarayıcıda / PWA olarak çalışır; Capacitor ile Android/iOS uygulamasına sarılabilir. Tüm assetler ücretsizdir (bkz. [`ASSET_LICENSES.md`](ASSET_LICENSES.md)).
+**Android ve iOS için üçüncü şahıs kameralı survival horror.** Three.js + TypeScript ile yazıldı; [Capacitor](https://capacitorjs.com) ile native Android (APK/AAB) ve iOS (Xcode) uygulaması olarak derlenir ([`docs/NATIVE.md`](docs/NATIVE.md)). Aynı oyunun web sürümü yalnızca iPad'den hızlı test içindir ([`docs/DEPLOY.md`](docs/DEPLOY.md)). Tüm assetler ücretsizdir (bkz. [`ASSET_LICENSES.md`](ASSET_LICENSES.md)).
 
 > *2006, Kasım. Telsiz teknisyeni Ela Demir, gece 03:17'de 1996'dan beri karantinada olan maden kasabası Karaçam'ın ölü sivil savunma frekansında on yıl önce kaybolan babasının sesini duyar: "Ela. Kapat onu."*
 
@@ -42,12 +42,12 @@ Telefon için: `dist/` klasörünü HTTPS üzerinden yayınla (ör. GitHub Pages
 ### iPad / ücretsiz web test sürümü
 Her push'ta GitHub Actions oyunu derler; depo public ise GitHub Pages'e yayınlar: **https://kero200713-lgtm.github.io/-Uu/**. Depo private kalacaksa Netlify / Cloudflare Pages (ücretsiz) kullanılabilir. Adımlar, iPad'de tam ekran oynama ve sorun giderme: [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
-### Android/iOS paketleme (isteğe bağlı)
+### Android / iOS
 ```bash
-npm i -D @capacitor/cli @capacitor/core @capacitor/android
-npx cap init UGULTU com.example.ugultu --web-dir dist
-npm run build && npx cap add android && npx cap open android
+npm run android:apk   # debug APK (JDK 21 + Android SDK gerekir)
+npm run cap:sync      # web derlemesini android/ ve ios/ projelerine kopyalar
 ```
+GitHub Actions her push'ta debug APK üretir (Artifacts), imza anahtarı tanımlıysa Google Play için AAB de üretir; iOS projesini simülatör için derleyerek doğrular. Ayrıntılar: [`docs/NATIVE.md`](docs/NATIVE.md).
 
 ## Testler
 Chromium + Playwright ile otomatik oynanış testleri (dokunmatik emülasyonu):
@@ -56,6 +56,7 @@ npm run build
 node tests/flow.mjs            # toplama, nişan+ateş, düşman saldırısı, envanter, belge, kayıt→yenile→devam
 node tests/story.mjs           # oyunun baştan sona otomatik oynanışı (tüm bulmacalar, boss, final, krediler)
 node tests/ipad.mjs            # iPad Pro 11 emülasyonu: çoklu dokunuş, butonlar, döndürme, Pages alt-yolu, service worker
+node tests/native.mjs          # native köprü taklidi: kayıt yedeği/geri yükleme, Android geri tuşu, arka plana geçiş
 S=areas Q=low node tests/playtest.mjs # tüm bölgeleri yükle (Q=low|medium|high), ekran görüntüsü + çizim istatistikleri
 node tests/playtest.mjs        # orman turu + joystick testi
 ```
@@ -73,7 +74,10 @@ src/items     eşya tanımları, envanter
 src/ui        HUD, dokunmatik kontroller, menüler, envanter, belgeler
 src/audio     ses motoru, prosedürel ses
 src/save      kayıt sistemi
+src/platform  native katman (Capacitor: depolama yedeği, geri tuşu, yaşam döngüsü, haptik)
 src/story     belgeler, hedefler, senaryo betikleri
 src/areas     altı bölgenin verisi
-tools/        asset pipeline'ı ve harita üreticileri
+tools/        asset pipeline'ı, harita ve ikon üreticileri
+android/      Android Studio / Gradle projesi (Capacitor)
+ios/          Xcode projesi (Capacitor, Swift Package Manager)
 ```

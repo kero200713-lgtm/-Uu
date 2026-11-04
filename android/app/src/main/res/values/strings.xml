@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">UĞULTU</string>
+    <string name="title_activity_main">UĞULTU</string>
+    <string name="package_name">com.ugultu.game</string>
+    <string name="custom_url_scheme">com.ugultu.game</string>
+</resources>

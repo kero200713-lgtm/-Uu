@@ -1,0 +1,90 @@
+# Native app builds (free GitHub-hosted runners).
+#  - Android: debug APK on every push (download it from the run's "Artifacts"
+#    and install it on any Android device). If the signing secrets exist, also
+#    a signed release AAB for Google Play — see docs/NATIVE.md.
+#  - iOS: compile check of the Xcode project for the simulator (no signing, no
+#    Apple account needed). Installing on a real iPhone/iPad needs signing.
+name: Native builds (Android / iOS)
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths-ignore: ['**.md', 'docs/**', 'tools/**', 'tests/**']
+  workflow_dispatch:
+    inputs:
+      ios:
+        description: 'Also compile the iOS project'
+        type: boolean
+        default: true
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Debug APK
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ugultu-android-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+      - name: Release AAB (only when signing secrets are set)
+        if: ${{ env.HAS_SIGNING == 'true' }}
+        working-directory: android
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks" ./gradlew bundleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('android/app/build/outputs/bundle/release/*.aab') != '' }}
+        with:
+          name: ugultu-android-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
+          retention-days: 30
+
+  ios:
+    # macOS minutes are free on public repos; on a private repo run it only by hand
+    if: ${{ (github.event_name == 'push' && !github.event.repository.private) || inputs.ios }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: Compile for the iOS simulator (unsigned)
+        shell: bash
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -n 40
