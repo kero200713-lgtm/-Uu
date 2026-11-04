@@ -27,7 +27,7 @@ await page.waitForTimeout(1500);
 
 // ---- pickup via touch interact button: walk to the pipe
 await G(() => window.__game.debugTeleport(9.5, 42.6, 35, -0.3));
-await page.waitForTimeout(800);
+await page.waitForFunction(() => !!window.__game.focus, null, { timeout: 30000 }).catch(() => {});
 const prompt = await G(() => window.__game.focus && window.__game.promptFor(window.__game.focus));
 check('interact prompt near pipe', !!prompt, JSON.stringify(prompt));
 await tapEl('.tb-interact');

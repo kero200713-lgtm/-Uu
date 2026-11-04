@@ -298,9 +298,32 @@ export class Game implements World {
     }
     // release GPU memory of textures this area doesn't use (mobile memory budget)
     assets.trimGPU(this.scene, [this.invUI.scene]);
-    // warm shaders to avoid hitches
+    // warm shaders to avoid hitches. three.js only compiles *visible* objects, so the
+    // pooled effects that start hidden (blood decals, muzzle flash, flare, unequipped
+    // weapons...) are shown for the compile; otherwise the first hit of a fight
+    // compiles a shader mid-combat (a 0.2-0.6 s freeze on mobile GPUs). Lights stay
+    // as they are: the light count is part of every program.
     this.rig.update(0.016, this.player.pos, 0, false);
-    try { await (this.engine.renderer as any).compileAsync?.(this.scene, this.cam); } catch { this.engine.renderer.compile(this.scene, this.cam); }
+    const hidden: THREE.Object3D[] = [];
+    this.scene.traverse((o: any) => { if (!o.visible && !o.isLight) { hidden.push(o); o.visible = true; } });
+    // compile against the target the scene really renders into (the HDR buffer when
+    // post-processing is on): output colour space / tone mapping are part of the key
+    const r = this.engine.renderer, target = (this.engine as any).rt ?? null;
+    r.setRenderTarget(target);
+    try {
+      try { await (r as any).compileAsync?.(this.scene, this.cam); } catch { r.compile(this.scene, this.cam); }
+      // one real draw of everything (culling off) while the loading fade covers the
+      // screen: GPU drivers (Metal/ANGLE on iOS too) build pipeline state on first draw
+      // (every object, so far-away enemies also get their shadow-depth programs now
+      // instead of the moment they first step into the flashlight)
+      const culled: THREE.Object3D[] = [];
+      this.scene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
+      const restoreFx = this.fx.prewarm(this.cam);
+      r.setRenderTarget(null);
+      this.engine.render(0.016); // the engine's real path: scene -> HDR target -> post
+      restoreFx();
+      for (const o of culled) o.frustumCulled = true;
+    } finally { r.setRenderTarget(null); for (const o of hidden) o.visible = false; }
     this.startAmbience(env);
     this.musicWanted = env.music ?? null;
     if (!menu) {

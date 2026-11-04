@@ -151,7 +151,8 @@ export class Enemy {
     if (!this.ready) return;
     const camD = this.pos.distanceTo(this.w.camPos);
     this.attackCd -= dt; this.stateT += dt; this.hitFlash = Math.max(0, this.hitFlash - dt * 4);
-    if (this.state === 'dormant') return;
+    // dormant: no AI, but a visible one (scripted apparitions) must still pose, never T-pose
+    if (this.state === 'dormant') { if (this.root.visible) this.anim.update(dt); return; }
     // think at reduced rate when far
     this.thinkT -= dt;
     if (this.thinkT <= 0 && this.state !== 'dead') {

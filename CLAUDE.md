@@ -17,4 +17,6 @@ Mobile third-person survival horror, Three.js r170 + TypeScript + Vite. **Primar
 * Tests import Playwright through `tests/pw.mjs` (global install via NODE_PATH; `npm install` prunes node_modules links).
 * Tests run Chromium + SwiftShader (slow, ~5 fps; game dt is clamped, so wait on conditions, not timers). `DIST=<dir>` points any test at another build directory.
 * Character close-ups: `node tests/hair.mjs long` → `tests/out/hair_long_*.png`.
+* Combat hitches: `node tests/perf_combat.mjs` must show no "new programs during combat" and no spikes. Shaders are warmed in `Game.loadArea` (compiled against the HDR target, then one real engine frame with everything visible/unculled + `FX.prewarm`).
+* Playtest-fix screenshots: `node tests/visual_fixes.mjs` → `tests/out/vf-*.png` (chest lamp, map edge, apparition, blood pools).
 * Character textures are painted by `tools/pipeline/paint_characters.py` (needs the Quaternius UBC source glTFs); small `_s` variants are 512 px resizes.

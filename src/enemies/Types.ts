@@ -16,7 +16,7 @@ const HOLLOW_VARIANTS: Record<string, Partial<EnemyTuning['human']>> = {
 export function hollowTuning(variant = 'town'): EnemyTuning {
   const hv = HOLLOW_VARIANTS[variant] || HOLLOW_VARIANTS.town;
   return {
-    hp: 100, walk: 0.75, run: 2.35, turn: 5, view: 15, fov: 0.35, hearMul: 1,
+    hp: 80, walk: 0.75, run: 2.35, turn: 5, view: 15, fov: 0.35, hearMul: 1,
     attackRange: 1.25, attackDmg: 16, attackTime: 1.4, attackHit: 0.45, attackCd: 1.1, grabChance: 0.35,
     staggerThreshold: 0.6, knockResist: 0,
     anims: { idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', walkRate: 0.95, run: 'Zombie_Walk_Fwd_Loop', runRate: 2.2, attack: 'Zombie_Scratch', attackRate: 1.15, hit: 'Hit_Chest', death: 'Death01', search: 'Zombie_Idle_Loop' },
@@ -90,7 +90,7 @@ export class Husk extends Enemy {
   stepT = 0;
   constructor(def: EnemyDef, w: World) {
     super(def, {
-      hp: 520, walk: 0.62, run: 1.15, turn: 2.5, view: 13, fov: 0.2, hearMul: 1.5, relentless: true,
+      hp: 440, walk: 0.62, run: 1.15, turn: 2.5, view: 13, fov: 0.2, hearMul: 1.5, relentless: true,
       attackRange: 1.55, attackDmg: 34, attackTime: 1.6, attackHit: 0.5, attackCd: 1.6, grabChance: 0,
       staggerThreshold: 0.95, knockResist: 0.85,
       anims: { idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', walkRate: 0.75, run: 'Zombie_Walk_Fwd_Loop', runRate: 1.25, attack: 'Melee_Hook', attackRate: 0.8, hit: 'Hit_Chest', death: 'Death01' },

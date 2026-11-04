@@ -58,8 +58,8 @@ Kamera: omuz üstü, duvar çarpışmalı (küre süpürme + yumuşak geri dön�
 ## 7. Savaş
 | Silah | Hasar | Şarjör | Menzil | Gürültü | Rol |
 |---|---|---|---|---|---|
-| Demir boru | 22 | — | 1.9 m | 5 | Zayıf ama sınırsız; sersemletir (0.7) |
-| 9mm tabanca | 26 | 10 | 45 m | 26 | Ana silah |
+| Demir boru | 30 | — | 1.9 m | 5 | Zayıf ama sınırsız; sersemletir (0.7) |
+| 9mm tabanca | 28 | 10 | 45 m | 26 | Ana silah |
 | Pompalı tüfek | 7 × 17 | 4 | 18 m | 34 | Nadir; yere serer, panik butonu |
 | Çakı | — | tek kullanım | — | — | Yakalanınca otomatik kurtarır |
 | İşaret fişeği | — | — | atış | yüksek | Işık + ses: düşmanları çeker/oyalar |
@@ -71,9 +71,9 @@ Geri bildirim: isabet sesi + kan/kıvılcım parçacığı, düşmanın sendelem
 ## 8. Düşmanlar
 | Ad | Can | Hız (yürü/koş) | Görüş | İşitme | Davranış |
 |---|---|---|---|---|---|
-| **Oyuk** | 100 | 0.75 / 2.35 | 15 m, dar koni | ×1 | Devriye, ses kaynağına gider, son görülen yeri arar, geri döner; yakalar |
+| **Oyuk** | 80 | 0.75 / 2.35 | 15 m, dar koni | ×1 | Devriye, ses kaynağına gider, son görülen yeri arar, geri döner; yakalar |
 | **Pusucu** | 60 | 1.2 / 3.35 | 9 m | ×0.9 | Ölü gibi yatar; yaklaşınca sıçrar; vur-kaç |
-| **Şişkin** | 520 | 0.62 / 1.15 | 13 m | ×1.5 | Yavaş, çok dayanıklı, pes etmez (iz sürer) |
+| **Şişkin** | 440 | 0.62 / 1.15 | 13 m | ×1.5 | Yavaş, çok dayanıklı, pes etmez (iz sürer) |
 | **Dinleyen** | ∞ | 0.85 / 4.1 | kör | ×1.8 | Yalnızca sesle avlar; duyduğu sürece kovalar; öldürülemez |
 | **KORO** | boss | sabit | — | — | Kırmızı halkayla önceden gösterilen yere vuruşlar; her kapanan rezonatörde vuruş aralığı kısalır (8 → 3.6 sn) ve ikinci rezonatörden sonra rastgele ek vuruşlar gelir |
 

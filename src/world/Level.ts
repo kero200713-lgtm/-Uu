@@ -120,12 +120,16 @@ export class Level {
 
     // ---------- solid props first (they shape AO & nav) ----------
     const propPlacements: { pack: string; name: string; m: THREE.Matrix4; solid: boolean }[] = [];
+    let flatCount = 0;
     const placeProp = (p: PropDef) => {
       const pg = assets.prop(p.pack, p.name);
       if (!pg) { console.warn('missing prop', p.pack, p.name); return; }
       const s = p.scale ?? 1;
       const rot = THREE.MathUtils.degToRad(p.rot ?? 0);
-      const pos = this.w(p.at[0], p.at[1], p.h ?? 0);
+      // paper-thin ground decals (blood pools) would z-fight with the floor: lift them a
+      // few mm, each a little more than the last so overlapping ones don't fight either
+      const lift = pg.size.y < 0.005 ? 0.012 + (flatCount++ % 6) * 0.004 : 0;
+      const pos = this.w(p.at[0], p.at[1], (p.h ?? 0) + lift);
       const m = new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromEuler(new THREE.Euler(p.tilt ? THREE.MathUtils.degToRad(p.tilt) : 0, rot, 0)), new THREE.Vector3(s, s, s));
       const solid = p.solid ?? (pg.size.y * s > 0.6 && Math.max(pg.size.x, pg.size.z) * s > 0.5);
       propPlacements.push({ pack: p.pack, name: p.name, m, solid });
@@ -209,6 +213,7 @@ export class Level {
         // handled below
       }
     }
+    if (def.voidFill === 'trees') this.buildSkirt((m) => B(m, 'floor'));
     for (const [key, { b, kind }] of builders) {
       if (b.empty) continue;
       const geo = b.build();
@@ -316,26 +321,77 @@ export class Level {
     }
   }
 
+  /** Tree/forest margin around outdoor maps (cells). */
+  static SKIRT = 12;
+
+  /**
+   * Material of a path that continues out of the map through an exit (road past
+   * the forest gate etc.), or null. Only for cells outside the grid, straight out
+   * from the edge (not corners).
+   */
+  private laneOut(x: number, y: number): string | null {
+    const g = this.grid;
+    if (g.inside(x, y)) return null;
+    const ox = x < 0 || x >= g.w, oy = y < 0 || y >= g.h;
+    if (ox === oy) return null;
+    const dx = x < 0 ? 1 : x >= g.w ? -1 : 0, dy = y < 0 ? 1 : y >= g.h ? -1 : 0;
+    let ix = Math.min(g.w - 1, Math.max(0, x)), iy = Math.min(g.h - 1, Math.max(0, y));
+    for (let i = 0; i < 3; i++, ix += dx, iy += dy) {
+      const ch = g.ch(ix, iy), inf = g.info(ix, iy);
+      if (ch === 'F' || ch === 'G' || ch === 'D' || ch === 'S') continue; // fences/gates/doors on the edge
+      if (inf.kind === 'floor' && inf.floor && !inf.indoor) return inf.floor;
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * Outdoor maps never end at the grid edge: ground under tree cells and a
+   * forest-floor skirt around the whole map, with roads/paths running on out of
+   * the exits. Trees on the skirt come from buildTrees().
+   */
+  private buildSkirt(floorB: (mat: string) => GeoBuilder) {
+    const g = this.grid, T = this.T, M = Level.SKIRT, uvs = 1 / 2;
+    for (let y = -M; y < g.h + M; y++) for (let x = -M; x < g.w + M; x++) {
+      let mat: string | null = null;
+      if (g.inside(x, y)) {
+        const ch = g.ch(x, y);
+        if (ch === 'T' || ch === ' ') mat = 'ground_forest';
+      } else mat = this.laneOut(x, y) ?? 'ground_forest';
+      if (!mat) continue;
+      const x0 = x * T, z0 = y * T, x1 = x0 + T, z1 = z0 + T;
+      floorB(mat).quad([x0, 0, z0], [x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [0, 1, 0], [x0 * uvs, z0 * uvs], [x0 * uvs, z1 * uvs], [x1 * uvs, z1 * uvs], [x1 * uvs, z0 * uvs]);
+    }
+  }
+
   private buildTrees(q: QualityPreset, out: { pack: string; name: string; m: THREE.Matrix4; solid: boolean }[]) {
     const g = this.grid;
     const r = this.rng(4242 + g.w * 13 + g.h);
     const evergreen = ['PineTree_1', 'PineTree_2', 'PineTree_3', 'PineTree_4', 'PineTree_5'];
     const dead = ['CommonTree_Dead_1', 'CommonTree_Dead_2', 'CommonTree_Dead_3', 'BirchTree_Dead_1', 'BirchTree_Dead_2', 'Willow_Dead_1'];
+    const outdoorFill = this.def.voidFill === 'trees';
+    const open = (x: number, y: number) => {
+      if (!g.inside(x, y)) return outdoorFill && this.laneOut(x, y) !== null;
+      const k = g.info(x, y).kind; return k === 'floor' || k === 'door' || k === 'water';
+    };
+    const DMAX = outdoorFill ? 7 : 4;
     const distToFloor = (x: number, y: number) => {
-      for (let d = 1; d <= 4; d++) for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) {
+      for (let d = 1; d <= DMAX; d++) for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue;
-        const k = g.info(x + dx, y + dy).kind; if (k === 'floor' || k === 'door' || k === 'water') return d;
+        if (open(x + dx, y + dy)) return d;
       }
       return 99;
     };
-    for (let y = -3; y < g.h + 3; y++) for (let x = -3; x < g.w + 3; x++) {
+    const M = outdoorFill ? Level.SKIRT : 3;
+    for (let y = -M; y < g.h + M; y++) for (let x = -M; x < g.w + M; x++) {
       const ch = g.ch(x, y);
-      const isTree = ch === 'T' || (ch === ' ' && this.def.voidFill === 'trees');
+      const isTree = ch === 'T' || (ch === ' ' && outdoorFill && !open(x, y));
       if (!isTree) continue;
       const d = distToFloor(x, y);
-      if (d > 4) continue;
-      // big trees (~9-12 m): sparse placement still reads as dense forest
-      const chance = d <= 1 ? 0.55 : d === 2 ? 0.38 : 0.2;
+      if (d > DMAX) continue;
+      // big trees (~9-12 m): sparse placement still reads as dense forest; the
+      // outer belt (d >= 5) only has to break the horizon inside the fog
+      const chance = d <= 1 ? 0.55 : d === 2 ? 0.38 : d <= 4 ? 0.2 : 0.11;
       if (r() > chance) continue;
       const pool = r() < 0.7 ? evergreen : dead;
       const name = pool[Math.floor(r() * pool.length)];

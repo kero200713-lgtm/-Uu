@@ -16,9 +16,9 @@ const L = (tr: string, en: string): Loc => ({ tr, en });
 
 export const ITEMS: Record<string, ItemDef> = {
   pipe: { id: 'pipe', kind: 'weapon', stack: 1, icon: 'pipe', name: L('Demir Boru', 'Iron Pipe'), desc: L('Paslı, ağır bir su borusu. Mermisi bitmez ama seni yakına getirir.', 'A rusty, heavy water pipe. Never runs dry — but it brings you close.'),
-    weapon: { type: 'melee', damage: 22, mag: 0, fireDelay: 0.85, spread: 0, pellets: 1, range: 1.9, noise: 5, recoil: 0, reload: 0, stagger: 0.7, knockdown: 0.15 } },
+    weapon: { type: 'melee', damage: 30, mag: 0, fireDelay: 0.85, spread: 0, pellets: 1, range: 1.9, noise: 5, recoil: 0, reload: 0, stagger: 0.7, knockdown: 0.15 } },
   pistol: { id: 'pistol', kind: 'weapon', stack: 1, icon: 'pistol', name: L('9mm Tabanca', '9mm Pistol'), desc: L('Jandarma karakolundan. Şarjör: 10. Kafaya isabet iki kat acıtır.', 'From the gendarmerie post. Magazine: 10. Headshots hurt twice as much.'),
-    weapon: { type: 'pistol', damage: 26, mag: 10, ammo: 'ammo_9mm', fireDelay: 0.32, spread: 0.018, pellets: 1, range: 45, noise: 26, recoil: 0.05, reload: 1.6, stagger: 0.35, knockdown: 0.05 } },
+    weapon: { type: 'pistol', damage: 28, mag: 10, ammo: 'ammo_9mm', fireDelay: 0.32, spread: 0.018, pellets: 1, range: 45, noise: 26, recoil: 0.05, reload: 1.6, stagger: 0.35, knockdown: 0.05 } },
   shotgun: { id: 'shotgun', kind: 'weapon', stack: 1, icon: 'shotgun', name: L('Pompalı Tüfek', 'Pump Shotgun'), desc: L('Maden bekçisinin tüfeği. Yakın mesafede yıkıcı. Fişekler nadir.', "The mine watchman's shotgun. Devastating up close. Shells are rare."),
     weapon: { type: 'shotgun', damage: 17, mag: 4, ammo: 'ammo_shell', fireDelay: 1.0, spread: 0.075, pellets: 7, range: 18, noise: 34, recoil: 0.13, reload: 2.3, stagger: 1, knockdown: 0.55 } },
   ammo_9mm: { id: 'ammo_9mm', kind: 'ammo', stack: 60, icon: 'bullets', name: L('9mm Mermi', '9mm Rounds'), desc: L('Tabanca mermisi.', 'Pistol ammunition.') },

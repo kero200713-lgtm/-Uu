@@ -190,7 +190,7 @@ export class Player implements PlayerLike {
   onFlare: () => void = () => {};
   private shootHold = 0;
   private flickT = 0;
-  private torch: THREE.Object3D | null = null;
+  private torch: THREE.Object3D | null = null; private torchMounted = true;
 
   constructor(private q: QualityPreset) {
     this.flash = new THREE.SpotLight(0xfff1dc, 0, 26, 0.48, 0.55, 1.4);
@@ -223,14 +223,64 @@ export class Player implements PlayerLike {
     this.weapons.set('pistol', g(pistol, [0.0, 0.07, 0.03], [0, Math.PI / 2, -Math.PI / 2]));
     this.weapons.set('shotgun', g(shotgun, [0.0, 0.08, 0.05], [0, Math.PI / 2, -Math.PI / 2]));
     this.weapons.get('pistol')!.add(this.muzzle); this.muzzle.position.set(0, 0.25, 0.04);
-    // shoulder lamp
+    // compact chest lamp; mounted onto the jacket surface on the first posed frame
     const tp = assets.prop('items', 'Torch');
-    const spine = this.anim.bone('spine_03');
-    if (tp && spine) {
+    if (tp) {
       const t = new THREE.Mesh(tp.geometry, dynamicPropMaterial());
-      t.scale.setScalar(0.8); t.rotation.set(Math.PI / 2, 0, 0); t.position.set(0.09, 0.12, 0.13);
-      spine.add(t); this.torch = t;
+      t.scale.set(0.72, 0.42, 0.72); // ~11 cm clip-on lamp, lens end = +Y
+      t.castShadow = false; t.visible = false;
+      this.torch = t; this.torchMounted = false;
     }
+  }
+
+  /**
+   * Places the lamp on the upper-left chest: a ray from in front of the posed
+   * character finds the jacket surface, so it sits on the body whatever the
+   * bone axes, clothing inflation or proportions are. Parented to spine_03 so it
+   * follows breathing and aiming.
+   */
+  private mountTorch() {
+    const t = this.torch, spine = this.anim.bone('spine_03');
+    if (!t || !spine) return;
+    this.torchMounted = true;
+    this.root.updateMatrixWorld(true);
+    const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    const sp = spine.getWorldPosition(new THREE.Vector3());
+    const aim = sp.clone().addScaledVector(right, -0.075); aim.y += 0.06; // her left, upper chest
+    // front-most skinned vertex of the jacket around that spot (a Raycaster would test the
+    // compressed mesh's unskinned bounds and miss)
+    const body = this.human.body, P = body.geometry.attributes.position, v = new THREE.Vector3(), d = new THREE.Vector3();
+    let best = -Infinity;
+    for (let i = 0; i < P.count; i++) {
+      body.getVertexPosition(i, v); v.applyMatrix4(body.matrixWorld);
+      d.subVectors(v, aim); const along = d.dot(fwd);
+      d.addScaledVector(fwd, -along);
+      if (d.lengthSq() < 0.035 * 0.035 && along > best) best = along;
+    }
+    const surface = aim.clone().addScaledVector(fwd, best > -1 ? best : 0.14);
+    // lamp axis: forward, a little down and outward; base resting on the jacket
+    const dir = fwd.clone().addScaledVector(right, -0.12).add(new THREE.Vector3(0, -0.1, 0)).normalize();
+    // base sunk ~1 cm into the jacket so no gap shows around the curved chest
+    const base = surface.clone().addScaledVector(fwd, -0.012);
+    const qWorld = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const holder = new THREE.Object3D();
+    spine.add(holder);
+    spine.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(spine.matrixWorld).invert();
+    const local = new THREE.Matrix4().compose(base, qWorld, new THREE.Vector3(1, 1, 1)).premultiply(inv);
+    local.decompose(holder.position, holder.quaternion, holder.scale);
+    // undo the bone's own world scale so the lamp keeps its real size
+    const ws = spine.getWorldScale(new THREE.Vector3());
+    holder.scale.set(1 / ws.x, 1 / ws.y, 1 / ws.z);
+    holder.add(t);
+    t.visible = true;
+    // mounting clip + a short strap piece against the jacket: reads as clipped on, not floating
+    const dark = new THREE.MeshStandardMaterial({ color: 0x16181a, roughness: 0.8, metalness: 0.2 });
+    const clip = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.04, 0.048), dark);
+    clip.position.set(0, 0.018, 0); holder.add(clip);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.16), dark);
+    strap.position.set(0, -0.004, 0); holder.add(strap);
   }
 
   /** Gives painted clothes some thickness so they read as garments, not skin. */
@@ -370,6 +420,7 @@ export class Player implements PlayerLike {
 
     // ---- animation
     this.animate(dt, v, aiming, rig);
+    if (!this.torchMounted) this.mountTorch();
     this.updateFlash(dt, rig);
     if (this.recoil > 0) rig.pitch += this.recoil * dt * 3.5;
   }
@@ -507,9 +558,11 @@ export class Player implements PlayerLike {
     audio.play('p_hurt', { volume: 0.9, priority: 3 });
     audio.play('hit', { volume: 0.7 });
     if (settings.data.vibration) vibrate(60);
-    if (this.hp <= 0) { this.hp = 0; this.die(); return; }
+    if (this.hp <= 0) { this.hp = 0; this.releaseGrab(false); this.die(); return; }
     tmp.subVectors(this.pos, from).setY(0).normalize();
     this.vel.addScaledVector(tmp, opts.knock ? 4 : 1.6);
+    // a second attacker while held: the hit lands, but the grab (and its struggle) stays in charge
+    if (this.state === 'grabbed') { this.limp = this.hp < 25 ? 1 : 0; return; }
     if (opts.knock) { this.state = 'down'; this.stateT = 0; this.anim.full('Hit_Knockback', { fade: 0.08, loop: false, speed: 1.1 }); this.invulnerable = 1.4; }
     else if (!['reload', 'heal'].includes(this.state)) { this.state = 'hurt'; this.stateT = 0; this.anim.arms(Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head', { fade: 0.05, loop: false, speed: 1.4 }); }
     this.limp = this.hp < 25 ? 1 : 0;
@@ -537,9 +590,10 @@ export class Player implements PlayerLike {
   }
 
   private handleGrab(dt: number) {
-    if (this.state !== 'grabbed' || !this.grabbedBy) return;
+    if (!this.grabbedBy) return;
     const e = this.grabbedBy;
-    if (e.state === 'dead' || e.state === 'stagger' || e.state === 'down') { this.releaseGrab(false); return; }
+    // never leave a grab dangling: the holder died, let go, or we left the grabbed state
+    if (this.state !== 'grabbed' || e.state !== 'grab' || e.hp <= 0 || !e.root?.parent) { this.releaseGrab(false); return; }
     if (this.grabKnifeT > 0) {
       this.grabKnifeT -= dt;
       if (this.grabKnifeT <= 0) {
@@ -639,9 +693,10 @@ export class Player implements PlayerLike {
       }
     }
     // beam origin: chest lamp; direction: camera aim (smoothed)
-    const sp = this.anim.bone('spine_03');
-    const origin = sp ? sp.getWorldPosition(tmp) : tmp.copy(this.pos).setY(1.4);
-    origin.y += 0.08;
+    // beam leaves the lamp's lens (falls back to the chest before it is mounted)
+    let origin: THREE.Vector3;
+    if (this.torch && this.torch.visible) origin = this.torch.localToWorld(tmp.set(0, 0.26, 0));
+    else { const sp = this.anim.bone('spine_03'); origin = sp ? sp.getWorldPosition(tmp) : tmp.copy(this.pos).setY(1.4); origin.y += 0.08; }
     const fwd = rig.forward(tmp2);
     if (!this.aiming && this.moveAmount > 0.4 && rig.aim < 0.2) {
       // when walking unaimed, bias the beam to the body facing, slightly down
@@ -652,7 +707,7 @@ export class Player implements PlayerLike {
     const cur = this.flashTarget.position.clone().sub(this.flash.position).normalize();
     if (!isFinite(cur.x) || cur.lengthSq() < 0.5) cur.copy(fwd);
     cur.lerp(fwd, Math.min(1, dt * 12)).normalize();
-    this.flash.position.copy(origin).addScaledVector(fwd, 0.15);
+    this.flash.position.copy(origin).addScaledVector(fwd, 0.06);
     this.flashTarget.position.copy(this.flash.position).addScaledVector(cur, 6);
     this.flash.intensity = I * 75;
     // soft "character light" between camera and player keeps Ela readable in the dark

@@ -6,8 +6,9 @@ interface P { alive: boolean; pos: THREE.Vector3; vel: THREE.Vector3; life: numb
 let bloodTex: THREE.Texture | null = null;
 function bloodTexture() {
   if (bloodTex) return bloodTex;
-  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d')!;
+  g.scale(2, 2); // drawn in 128-unit space at 2x resolution: smooth edges up close
   for (let i = 0; i < 26; i++) {
     const x = 64 + (Math.random() - 0.5) * 70 * (i < 4 ? 0.3 : 1), y = 64 + (Math.random() - 0.5) * 70 * (i < 4 ? 0.3 : 1), r = i < 4 ? 22 + Math.random() * 14 : 2 + Math.random() * 9;
     const grd = g.createRadialGradient(x, y, 0, x, y, r);
@@ -61,7 +62,8 @@ export class FX {
     this.muzzle = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffc080, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
     this.muzzle.scale.setScalar(0.5);
     this.group.add(this.muzzle);
-    const dm = new THREE.MeshBasicMaterial({ map: bloodTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    // lifted geometry instead of a slope-scaled polygon offset (that shifts with the view angle)
+    const dm = new THREE.MeshBasicMaterial({ map: bloodTexture(), transparent: true, depthWrite: false });
     for (let i = 0; i < 24; i++) {
       const d = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dm);
       d.rotation.x = -Math.PI / 2; d.visible = false; d.renderOrder = 2;
@@ -76,6 +78,29 @@ export class FX {
     const p = this.parts.find((x) => !x.alive);
     if (!p) return;
     p.alive = true; p.pos.copy(pos); p.vel.copy(vel); p.life = p.max = life; p.size = size; p.color.setHex(color); p.grav = grav; p.drag = drag; p.grow = grow; p.additive = additive;
+  }
+
+  /**
+   * Loading-time warm-up: puts every pooled effect in front of the camera with a
+   * visible size so the GPU builds its pipelines (fragment stage included) now
+   * rather than on the first hit of a fight. Returns the restore function.
+   */
+  prewarm(cam: THREE.Camera): () => void {
+    const at = new THREE.Vector3(0, 0, -2.5).applyQuaternion(cam.quaternion).add(cam.position);
+    const saved: [THREE.Object3D, THREE.Vector3, boolean][] = [];
+    for (const o of [...this.decals, this.muzzle, this.flareObj]) { saved.push([o, o.position.clone(), o.visible]); o.position.copy(at); o.visible = true; }
+    // decals lie flat: put them below eye level so they are seen from above, not edge-on
+    for (const d of this.decals) d.position.y -= 1.2;
+    const mm = this.muzzle.material as THREE.SpriteMaterial, op = mm.opacity; mm.opacity = 0.01;
+    const sz = this.sizeArr[0], col = this.colArr[3];
+    this.posArr[0] = at.x; this.posArr[1] = at.y; this.posArr[2] = at.z; this.sizeArr[0] = 0.05; this.colArr[3] = 0.02;
+    const g = this.points.geometry;
+    g.attributes.position.needsUpdate = g.attributes.psize.needsUpdate = g.attributes.pcolor.needsUpdate = true;
+    return () => {
+      for (const [o, p, v] of saved) { o.position.copy(p); o.visible = v; }
+      mm.opacity = op; this.sizeArr[0] = sz; this.colArr[3] = col;
+      g.attributes.psize.needsUpdate = g.attributes.pcolor.needsUpdate = true;
+    };
   }
 
   sparks(pos: THREE.Vector3, normal: THREE.Vector3, n = 10) {
@@ -105,7 +130,7 @@ export class FX {
 
   decal(pos: THREE.Vector3, size = 1) {
     const d = this.decals[this.decalIdx++ % this.decals.length];
-    d.position.set(pos.x, 0.015 + (this.decalIdx % 7) * 0.001, pos.z);
+    d.position.set(pos.x, 0.02 + (this.decalIdx % 7) * 0.003, pos.z);
     d.rotation.z = Math.random() * 6.28;
     d.scale.setScalar(size * (0.7 + Math.random() * 0.6));
     d.visible = true;
