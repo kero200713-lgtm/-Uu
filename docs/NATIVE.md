@@ -35,7 +35,7 @@ Her push'ta **Actions → "Native builds (Android / iOS)"** iş akışı çalı�
 4. Google Play'e yüklemek için Play Console geliştirici hesabı gerekir. Bu hesap **tek seferlik 25 $** tutar ve yayın kararı senindir; APK'yı cihaza kurup test etmek için gerekmez.
 
 ### Yerelde (bilgisayarda) derleme
-JDK 21 ve Android SDK (Android Studio ya da komut satırı araçları, ücretsiz) gerekir.
+Node.js 22+, JDK 21 ve Android SDK (Android Studio ya da komut satırı araçları, ücretsiz) gerekir.
 ```bash
 npm run android:apk        # → android/app/build/outputs/apk/debug/app-debug.apk
 npm run android:open       # Android Studio'da aç (emülatör / cihazda çalıştır, profilleme)
