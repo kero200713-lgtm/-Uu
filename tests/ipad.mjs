@@ -3,7 +3,7 @@
 // sub-path, and real multi-touch through CDP touch events:
 // menu tap -> new game -> joystick walk + simultaneous camera drag -> buttons
 // (flashlight, inventory, pause/resume) -> rotate to portrait and back.
-//   node tests/ipad.mjs            (DIST=<dir> to test another build)
+//   node tests/ipad.mjs            (DIST=<dir> to test another build, URL=<address> for a live deploy)
 import { chromium, devices } from './pw.mjs';
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
@@ -16,7 +16,7 @@ const srv = http.createServer((q, res) => {
   p = '/' + p.slice(SUB.length); if (p === '/') p = '/index.html';
   fs.readFile(path.join(ROOT, p), (e, d) => { if (e) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' }); res.end(d); });
 }).listen(0);
-const URL = `http://localhost:${srv.address().port}${SUB}`;
+const URL = process.env.URL || `http://localhost:${srv.address().port}${SUB}`; // URL=<live address> tests a deployed build
 
 const dev = devices['iPad Pro 11 landscape'];
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });

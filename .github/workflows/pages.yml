@@ -8,7 +8,7 @@ name: Web build (GitHub Pages)
 on:
   push:
     branches: [main, 'claude/**']
-    paths-ignore: ['**.md', 'docs/**', 'tools/**']
+    paths-ignore: ['**.md', 'docs/**', 'tools/**', 'tests/**']
   workflow_dispatch:
 
 permissions:
