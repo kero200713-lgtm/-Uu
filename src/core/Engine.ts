@@ -114,7 +114,7 @@ export class Engine {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = true;
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.12, this.q.far);
-    this.halfFloat = this.renderer.capabilities.isWebGL2 && !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
+    this.halfFloat = this.probeHalfFloat(gl as WebGL2RenderingContext);
     assets.anisotropy = this.q.anisotropy;
 
     const quadGeo = new THREE.PlaneGeometry(2, 2);
@@ -134,6 +134,9 @@ export class Engine {
     this.fsScene.add(this.fsQuad);
 
     window.addEventListener('resize', () => this.resize());
+    // iOS may drop the GL context under memory pressure: keep it restorable and tell the game
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); bus.emit('contextlost'); });
+    canvas.addEventListener('webglcontextrestored', () => bus.emit('contextrestored'));
     window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
     bus.on('settings', (k) => { if (k === 'quality' || k === 'renderScale' || k === '*') this.applyQuality(); });
     this.applyQuality();
@@ -153,9 +156,35 @@ export class Engine {
     bus.emit('quality', this.q);
   }
 
+  /**
+   * HDR target support differs between GPUs/browsers (older iOS Safari can
+   * report the extension yet refuse a multisampled RGBA16F framebuffer), so
+   * a tiny target is actually built and checked before relying on it.
+   */
+  private probeHalfFloat(gl: WebGL2RenderingContext) {
+    if (!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))) return false;
+    try {
+      for (const samples of [0, 4]) {
+        const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples });
+        this.renderer.setRenderTarget(rt);
+        const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+        this.renderer.setRenderTarget(null);
+        rt.dispose();
+        if (!ok) return false;
+      }
+      return true;
+    } catch { return false; }
+  }
+
+  /** Total rendered pixels per preset: keeps Retina iPads/phones from rendering 5M+ px per frame. */
+  static PIXEL_BUDGET: Record<string, number> = { low: 0.9e6, medium: 1.6e6, high: 2.8e6 };
+
   get pixelRatio() {
     const dpr = Math.min(window.devicePixelRatio || 1, this.q.maxDpr);
-    return dpr * this.q.renderScale * settings.data.renderScale * this.dynScale;
+    let pr = dpr * this.q.renderScale * settings.data.renderScale;
+    const px = window.innerWidth * window.innerHeight * pr * pr, budget = Engine.PIXEL_BUDGET[this.level] ?? 1.6e6;
+    if (px > budget) pr *= Math.sqrt(budget / px);
+    return pr * this.dynScale;
   }
 
   resize() {

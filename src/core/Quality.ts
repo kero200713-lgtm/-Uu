@@ -30,7 +30,10 @@ export function detectQuality(gl?: WebGLRenderingContext | WebGL2RenderingContex
   const nav: any = typeof navigator !== 'undefined' ? navigator : {};
   const mem = nav.deviceMemory || 4;
   const cores = nav.hardwareConcurrency || 4;
-  const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(nav.userAgent || '');
+  const ua = String(nav.userAgent || '');
+  // iPadOS Safari identifies as a Mac; a touch screen gives it away
+  const iPad = /iPad/.test(ua) || (/Macintosh/.test(ua) && (nav.maxTouchPoints || 0) > 1);
+  const mobile = iPad || /Android|iPhone|iPod|Mobile/i.test(ua);
   let gpu = '';
   try {
     if (gl) {
@@ -44,7 +47,9 @@ export function detectQuality(gl?: WebGLRenderingContext | WebGL2RenderingContex
     if (/intel/.test(g) && !/arc|iris xe/.test(g)) return 'medium';
     return 'high';
   }
-  // mobile GPUs
+  // mobile GPUs. Safari masks the GPU as "Apple GPU" and hides memory, so all
+  // iPhones/iPads start on Medium and the dynamic-resolution governor adapts.
+  if (/apple/.test(g) || (iPad && !g)) return 'medium';
   if (/adreno \(tm\) (7[3-9]\d|8\d\d)|adreno 7[3-9]\d|apple gpu|mali-g7[1-9]|mali-g7\d\d|immortalis|xclipse/.test(g) && mem >= 6) return 'high';
   if (/adreno \(tm\) [1-5]\d\d|mali-[t4]|mali-g5[0-2]|powervr/.test(g) || mem <= 3 || cores <= 4) return 'low';
   return 'medium';

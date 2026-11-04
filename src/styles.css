@@ -237,3 +237,8 @@ body.touch .hud-ammo { top: calc(70px + var(--sa-t)); }
 @media (orientation: portrait) and (max-width: 700px) {
   #inventory { grid-template-columns: 1fr; grid-template-rows: auto minmax(160px, 1fr); }
 }
+
+/* boot / runtime error reporting (visible on devices without a console) */
+.boot-hint.err { color: #ffb4a8; max-width: 86vw; text-align: center; line-height: 1.4; }
+#errbox { position: fixed; left: 8px; bottom: 8px; max-width: 70vw; max-height: 30vh; overflow: auto; z-index: 90; padding: 6px 8px; background: rgba(40,6,6,0.85); color: #ffd0c8; font: 12px/1.35 monospace; white-space: pre-wrap; pointer-events: none; }
+#ctxlost { position: fixed; inset: 0; z-index: 95; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; background: #030405; color: var(--text); font-family: var(--ui); letter-spacing: 0.04em; }

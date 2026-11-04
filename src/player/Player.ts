@@ -202,7 +202,7 @@ export class Player implements PlayerLike {
   }
 
   async init(scene: THREE.Scene) {
-    this.human = await createHuman({ sex: 'f', variant: 'player', hair: 'long', hairColor: 0x2b1b12, eyes: 'normal', glow: 0 });
+    this.human = await createHuman({ sex: 'f', variant: 'player', hair: 'long', hairColor: 0x2b1b12, hairCap: true, eyes: 'normal', glow: 0 });
     this.inflateClothes(this.human.body);
     this.human.bodyMat.color.setScalar(1.12); // keep Ela readable in very dark scenes
     this.root.add(this.human.root);

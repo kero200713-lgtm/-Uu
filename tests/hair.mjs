@@ -19,7 +19,7 @@ const OUT = process.argv[3] || 'tests/out'; fs.mkdirSync(OUT, { recursive: true 
 for (const h of hairs) {
   await page.evaluate((h) => window.__game.debugHair(h === 'none' ? null : h), h);
   let i = 0;
-  for (const [ang, ht, d] of [[180, 0.1, 0.9], [0, 0.25, 0.9], [90, 0.2, 0.9], [20, -0.35, 1.5], [150, 0.7, 0.45]]) {
+  for (const [ang, ht, d] of [[180, 0.05, 0.6], [0, 0.25, 0.9], [90, 0.2, 0.9], [20, -0.35, 1.5], [150, 0.7, 0.45], [215, 0.35, 0.6]]) {
     await page.evaluate(([a, ht, d]) => window.__game.debugCloseUp(a, ht, d), [ang, ht, d]);
     await page.waitForTimeout(1200);
     await page.screenshot({ path: `${OUT}/hair_${h}_${i++}.png` });

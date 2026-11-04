@@ -111,7 +111,7 @@ Her bölge girişinde otomatik kayıt, her bölgede bir telsiz (manuel kayıt) v
 
 ## 12. Sanat yönü
 * Gerçekçiye yakın, düşük doygunluklu, 2000'ler Türk taşra dokusu: beton, sac, paslı metal, çam ormanı, eski sağlık ocağı yeşili, Sovyet-vari maden tesisi.
-* Karakterler tek ortak taban gövde + bölgeye/role göre elle boyanmış dokular (`tools/pipeline/paint_characters.py`). Ela'nın saç derisi saç rengiyle boyanır ve omuz hizasında saç modeli kullanılır (kel görünüm olmasın diye). Ceket gövdeye yapışık durmasın diye yüklemede düzgünleştirilip hafifçe şişirilir (`src/player/Player.ts`).
+* Karakterler tek ortak taban gövde + bölgeye/role göre elle boyanmış dokular (`tools/pipeline/paint_characters.py`). Ela omuz hizasında saç modeli kullanır; saç kartlarının arasında kafa derisi görünmesin diye gövdenin saçlı bölgesinden yüklemede ince bir "saç kapağı" kabuğu üretilir ve aynı saç dokusuyla kaplanır (`buildHairCap`). Boyalı saç çizgisi alnın üstünde kalır. Ceket gövdeye yapışık durmasın diye yüklemede düzgünleştirilip hafifçe şişirilir (`src/player/Player.ts`).
 * Enfeksiyon dili: soğuk camgöbeği damarlar, yavaş nabız atan parıltı. Oyuklar insan kalır; ne kadar ileri gidilirse o kadar bozulurlar.
 
 ## 13. Teknik bütçe (düşük kalite, orta segment telefon hedefi)
@@ -133,4 +133,5 @@ Grafik (Otomatik/Düşük/Orta/Yüksek, render ölçeği, dinamik çözünürlü
 * `node tests/flow.mjs` — dokunmatikle eşya alma, nişan+ateş, düşman ölümü, düşman saldırısı, envanter, belge, telsiz kaydı → sayfa yenileme → devam.
 * `node tests/story.mjs` — oyunun baştan sona otomatik oynanışı (zincir makası → sağlık ocağı → sigorta → maden → yakıt/jeneratör → asansör → tesis → kod → kaset → kuyu → KORO → 3 rezonatör → konsol → çöküş → kaçış → epilog → krediler).
 * `S=areas node tests/playtest.mjs` — altı bölgenin her kalite kademesinde yüklenmesi, ekran görüntüsü ve çizim istatistikleri.
+* `node tests/ipad.mjs` — iPad Pro 11 emülasyonu: GitHub Pages alt-yolu, çoklu dokunuş (joystick + kamera), butonlar, duraklatma, döndürme, service worker ile yeniden açılış.
 * `node tests/hair.mjs long` — Ela'nın yakın plan görüntüleri (saç/ceket kontrolü).

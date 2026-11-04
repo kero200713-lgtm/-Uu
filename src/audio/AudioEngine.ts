@@ -15,6 +15,7 @@ export interface Voice {
 }
 
 const BASE = './assets/audio/';
+const MUSIC_TRACKS = ['mus_menu', 'mus_safe', 'mus_chase', 'mus_boss', 'mus_ending'];
 
 /**
  * Web Audio engine: buses, sprite playback with random variations, 3D
@@ -32,6 +33,7 @@ export class AudioEngine {
   occluder: ((a: THREE.Vector3, b: THREE.Vector3) => boolean) | null = null;
   listener = new THREE.Vector3();
   proc: Procedural | null = null;
+  private primed = false;
   private musicEls = new Map<string, { el: HTMLAudioElement; node: MediaElementAudioSourceNode | null; gain: GainNode | null }>();
   musicName: string | null = null;
   private variants = new Map<string, string[]>();
@@ -74,11 +76,30 @@ export class AudioEngine {
     }
   }
 
-  /** Must be called from a user gesture on iOS/Android. */
+  /**
+   * Must be called from a user gesture on iOS/Android. Safe to call on every
+   * tap: it only does work while the context is not running (iOS also reports
+   * 'interrupted' after calls/app switches) or music has not been primed yet.
+   */
   unlock() {
     if (!this.ctx) return;
-    if (this.ctx.state === 'suspended') this.ctx.resume();
-    const b = this.ctx.createBuffer(1, 1, 22050); const s = this.ctx.createBufferSource(); s.buffer = b; s.connect(this.ctx.destination); s.start(0);
+    if (this.ctx.state !== 'running') {
+      this.ctx.resume().catch(() => {});
+      const b = this.ctx.createBuffer(1, 1, 22050); const s = this.ctx.createBufferSource(); s.buffer = b; s.connect(this.ctx.destination); s.start(0);
+    }
+    // iOS Safari only lets a media element start later (outside a gesture) if it
+    // was first started inside one, so every music track is primed muted here.
+    if (!this.primed) {
+      this.primed = true;
+      for (const n of MUSIC_TRACKS) {
+        if (n === this.musicName) continue;
+        const m = this.musicEl(n, n !== 'mus_ending');
+        m.el.muted = true;
+        m.el.play().then(() => { if (this.musicName !== n) { m.el.pause(); m.el.currentTime = 0; } m.el.muted = false; }).catch(() => { m.el.muted = false; });
+      }
+    }
+    const cur = this.musicName ? this.musicEls.get(this.musicName) : null;
+    if (cur && cur.el.paused && (cur.el.loop || cur.el.currentTime === 0)) cur.el.play().catch(() => {});
   }
 
   applyVolumes() {
@@ -184,6 +205,21 @@ export class AudioEngine {
   stopAll() { for (const v of this.voices) v.stop(0.2); this.voices = []; }
 
   // ---------------------------------------------------------------- music --
+  /** Music streams through Web Audio so volume and fades also work on iOS, where element.volume is read-only. */
+  private musicEl(name: string, loop: boolean) {
+    let m = this.musicEls.get(name);
+    if (m) return m;
+    const c = this.ctx!;
+    const el = new Audio(BASE + name + '.mp3');
+    el.loop = loop; el.preload = 'auto'; el.crossOrigin = 'anonymous';
+    el.setAttribute('playsinline', '');
+    let node: MediaElementAudioSourceNode | null = null, gain: GainNode | null = null;
+    try { node = c.createMediaElementSource(el); gain = c.createGain(); gain.gain.value = 0; node.connect(gain).connect(this.music); } catch { /* fallback: element volume */ }
+    m = { el, node, gain };
+    this.musicEls.set(name, m);
+    return m;
+  }
+
   playMusic(name: string | null, fade = 2.5, loop = true) {
     if (!this.ctx || name === this.musicName) return;
     const c = this.ctx, t = c.currentTime;
@@ -194,16 +230,8 @@ export class AudioEngine {
     }
     this.musicName = name;
     if (!name) return;
-    let m = this.musicEls.get(name);
-    if (!m) {
-      const el = new Audio(BASE + name + '.mp3');
-      el.loop = loop; el.preload = 'auto'; el.crossOrigin = 'anonymous';
-      let node: MediaElementAudioSourceNode | null = null, gain: GainNode | null = null;
-      try { node = c.createMediaElementSource(el); gain = c.createGain(); node.connect(gain).connect(this.music); } catch { /* fallback: element volume */ }
-      m = { el, node, gain };
-      this.musicEls.set(name, m);
-    }
-    m.el.loop = loop;
+    const m = this.musicEl(name, loop);
+    m.el.loop = loop; m.el.muted = false;
     if (m.gain) { m.gain.gain.cancelScheduledValues(t); m.gain.gain.setValueAtTime(0, t); m.gain.gain.linearRampToValueAtTime(1, t + fade); }
     m.el.currentTime = 0;
     m.el.play().catch(() => { /* will retry on next gesture */ });

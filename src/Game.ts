@@ -83,7 +83,7 @@ export class Game implements World {
     this.touch = new TouchControls(uiRoot);
     this.screens = new Screens(uiRoot);
     input.attachKeyboardMouse(canvas);
-    (window as any).__game = this;
+    (window as any).__game = this; (window as any).__audio = audio;
   }
 
   // -------------------------------------------------------------- boot ---

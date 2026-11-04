@@ -124,7 +124,7 @@ export function characterMaterial(variant: string, glowColor = 0x5fe8d0, glowStr
     emissiveMap: tex('glow'), emissive: new THREE.Color(glowColor), emissiveIntensity: variant === 'player' ? 0 : 0.45 * glowStrength,
     roughness: 1, metalness: 0,
   });
-  patchCharacter(m, variant === 'player' ? 0.32 : 0.16);
+  patchCharacter(m, variant === 'player' ? 0.22 : 0.16);
   m.customProgramCacheKey = () => 'char';
   charCache.set(key, m);
   return m;

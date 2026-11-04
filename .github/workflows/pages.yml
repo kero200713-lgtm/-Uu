@@ -1,0 +1,54 @@
+# Builds the web version on every push and publishes it to GitHub Pages, so the
+# latest playable build is always at https://<owner>.github.io/<repo>/
+# (open it in iPad Safari). Free on public repositories. While the repository
+# is private the build still runs (it catches broken builds) but the Pages
+# deploy step is skipped — see docs/DEPLOY.md.
+name: Web build (GitHub Pages)
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths-ignore: ['**.md', 'docs/**', 'tools/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Check the build is complete
+        run: |
+          test -f dist/index.html
+          test -f dist/sw.js && grep -q "ugultu-" dist/sw.js
+          test -d dist/assets/models && test -d dist/assets/textures && test -d dist/assets/audio
+          echo "build $(cat dist/version.txt), $(find dist -type f | wc -l) files, $(du -sh dist | cut -f1)"
+      - uses: actions/upload-pages-artifact@v3
+        if: ${{ !github.event.repository.private }}
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

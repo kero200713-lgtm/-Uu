@@ -194,9 +194,12 @@ def paint(variant, B, pos, nrm, aux, cov, skin_albedo, skin_normal, skin_rough):
         nonlocal alb, rough, nmap
         head = smooth(0.35, 0.6, M['head'])
         # hairline: high on the forehead, low at the nape, blended around the sides
+        # front hairline stays above the forehead (top of skull - 4 cm); the player's
+        # geometric hair cap covers the same region, so no dark band shows below it
+        y_top = float(np.max(np.where(head > 0.5, y, -1.0)))
         k = smooth(-0.03, 0.07, z)
-        line = (B.y_head - 0.03) * (1 - k) + (B.y_head + 0.095) * k
-        m = smooth(line, line + 0.025, y) * head * strength
+        line = (B.y_head - 0.03) * (1 - k) + (y_top - 0.04) * k
+        m = smooth(line, line + 0.02, y) * head * strength
         strands = 0.75 + 0.35 * fbm(P * np.array([90.0, 14.0, 90.0], np.float32), 1.0, 3, 91).reshape(H, Wd)
         base = col(color_hex)
         c = base[None, None, :] * strands[..., None]

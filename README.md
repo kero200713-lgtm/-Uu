@@ -39,6 +39,9 @@ npm run preview
 ```
 Telefon için: `dist/` klasörünü HTTPS üzerinden yayınla (ör. GitHub Pages), tarayıcıda aç → "Ana ekrana ekle". Oyun tam ekran ve yatay modda PWA olarak çalışır, ilk oynanıştan sonra çevrimdışı açılır.
 
+### iPad / ücretsiz web test sürümü
+Her push'ta GitHub Actions oyunu derler; depo public ise GitHub Pages'e yayınlar: **https://kero200713-lgtm.github.io/-Uu/**. Depo private kalacaksa Netlify / Cloudflare Pages (ücretsiz) kullanılabilir. Adımlar, iPad'de tam ekran oynama ve sorun giderme: [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 ### Android/iOS paketleme (isteğe bağlı)
 ```bash
 npm i -D @capacitor/cli @capacitor/core @capacitor/android
@@ -52,6 +55,7 @@ Chromium + Playwright ile otomatik oynanış testleri (dokunmatik emülasyonu):
 npm run build
 node tests/flow.mjs            # toplama, nişan+ateş, düşman saldırısı, envanter, belge, kayıt→yenile→devam
 node tests/story.mjs           # oyunun baştan sona otomatik oynanışı (tüm bulmacalar, boss, final, krediler)
+node tests/ipad.mjs            # iPad Pro 11 emülasyonu: çoklu dokunuş, butonlar, döndürme, Pages alt-yolu, service worker
 S=areas Q=low node tests/playtest.mjs # tüm bölgeleri yükle (Q=low|medium|high), ekran görüntüsü + çizim istatistikleri
 node tests/playtest.mjs        # orman turu + joystick testi
 ```

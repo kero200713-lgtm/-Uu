@@ -22,7 +22,7 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('console', (m) => { const t = m.text(); if ((m.type() === 'error' || m.type() === 'warning') && !/parallel_shader_compile|sw\.js/.test(t)) errors.push(`[${m.type()}] ${t}`); if (process.env.V) console.log('  console:', t.slice(0, 200)); });
 page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message));
-page.on('requestfailed', (r) => errors.push('[reqfail] ' + r.url()));
+page.on('requestfailed', (r) => { const f = r.failure()?.errorText || ''; if (/ERR_ABORTED/.test(f) && /\.mp3$/.test(r.url())) return; errors.push('[reqfail] ' + r.url() + ' ' + f); }); // aborted music streams on track switch are expected
 page.on('response', (r) => { if (r.status() >= 400 && !/sw\.js/.test(r.url())) errors.push('[http ' + r.status() + '] ' + r.url()); });
 await page.addInitScript((q) => { if (!localStorage.getItem('ugultu_settings_v1')) localStorage.setItem('ugultu_settings_v1', JSON.stringify({ quality: q, language: 'tr', dynamicResolution: false, showFps: true })); }, quality);
 const t0 = Date.now();

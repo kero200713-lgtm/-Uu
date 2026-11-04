@@ -31,7 +31,7 @@ await page.waitForTimeout(800);
 const prompt = await G(() => window.__game.focus && window.__game.promptFor(window.__game.focus));
 check('interact prompt near pipe', !!prompt, JSON.stringify(prompt));
 await tapEl('.tb-interact');
-await page.waitForTimeout(900);
+await page.waitForFunction(() => window.__game.player.inv.weapons.includes('pipe'), null, { timeout: 30000 }).catch(() => {});
 check('pipe picked up via touch', await G(() => window.__game.player.inv.weapons.includes('pipe')));
 
 // ---- combat: give pistol, approach the bus-stop eater, aim + fire with touch buttons
