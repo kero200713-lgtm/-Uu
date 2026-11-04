@@ -96,7 +96,7 @@ export class Husk extends Enemy {
       anims: { idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', walkRate: 0.75, run: 'Zombie_Walk_Fwd_Loop', runRate: 1.25, attack: 'Melee_Hook', attackRate: 0.8, hit: 'Hit_Chest', death: 'Death01' },
       voice: { idle: ['husk_growl', 'z_moan'], alert: 'husk_growl', attack: 'husk_growl', hurt: 'z_hurt', death: 'z_death', pitch: 0.7 },
       human: {
-        sex: 'm', variant: 'husk', hair: null, eyes: 'dead', glow: 1.4, scale: 1.18,
+        sex: 'm', variant: 'husk', hair: null, eyes: 'dead', glow: 1.0, scale: 1.18,
         boneScale: { spine_02: [1.32, 1.05, 1.4], pelvis: [1.2, 1, 1.25], upperarm_l: [1.25, 1.0, 1.25], upperarm_r: [1.25, 1.0, 1.25], neck_01: [1.3, 0.8, 1.3], thigh_l: [1.2, 1, 1.2], thigh_r: [1.2, 1, 1.2] },
       },
     }, w);
@@ -126,7 +126,7 @@ export class Listener extends Enemy {
       anims: { idle: 'Idle_No_Loop', walk: 'Walk_Loop', walkRate: 0.55, run: 'Jog_Fwd_Loop', runRate: 1.25, attack: 'Sword_Attack', attackRate: 1.35, hit: 'Hit_Knockback', death: 'Death01', search: 'Idle_No_Loop' },
       voice: { idle: ['lis_click'], alert: 'lurker_scream', attack: 'husk_growl', hurt: 'z_hurt', death: 'z_death', pitch: 0.62 },
       human: {
-        sex: 'm', variant: 'listener', hair: null, eyes: 'none', glow: 1.6, scale: 1.12,
+        sex: 'm', variant: 'listener', hair: null, eyes: 'none', glow: 1.1, scale: 1.12,
         boneScale: { spine_01: [0.88, 1.18, 0.88], spine_02: [0.9, 1.15, 0.9], neck_01: [0.8, 1.6, 0.8], upperarm_l: [0.85, 1.35, 0.85], upperarm_r: [0.85, 1.35, 0.85], lowerarm_l: [0.85, 1.3, 0.85], lowerarm_r: [0.85, 1.3, 0.85], hand_l: [1, 1.4, 1], hand_r: [1, 1.4, 1], thigh_l: [0.9, 1.12, 0.9], thigh_r: [0.9, 1.12, 0.9], Head: [0.7, 0.55, 0.7] },
       },
     }, w);

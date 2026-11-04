@@ -12,21 +12,24 @@ await page.goto(`http://localhost:${srv.address().port}/`);
 await page.waitForFunction(() => window.__game && window.__game.state === 'menu', null, { timeout: 120000 });
 await page.evaluate(() => window.__game.newGame());
 await page.waitForFunction(() => window.__game.state === 'play', null, { timeout: 120000 });
-await page.evaluate(() => window.__game.loadArea('town', 'from_forest'));
-const r = await page.evaluate(async () => {
-  const g = window.__game;
-  g.flags.add('unlock:house_front');
-  g.debugTeleport(5.5, 31.2, 180, -0.05);
-  g.player.yaw = 0; g.player.root.rotation.y = 0; // face the camera
-  g.rig.yaw = Math.PI; g.rig.dist = 1.8;
-  return { ok: true };
-});
-await page.waitForTimeout(2500);
-await page.evaluate(() => { const g = window.__game; g.player.yaw = 0; g.rig.yaw = Math.PI; });
-await page.waitForTimeout(1500);
-await page.screenshot({ path: '/tmp/claude-0/ela_front.png' });
-await page.evaluate(() => { const g = window.__game; g.player.yaw = Math.PI; g.rig.yaw = Math.PI; });
-await page.waitForTimeout(1500);
-await page.screenshot({ path: '/tmp/claude-0/ela_back.png' });
+const shots = [['clinic', 'e_cl_lurk_a', 0.0, 'lurk'], ['mine', 'e_mn_husk', 3.2, 'husk'], ['facility', 'e_fc_listener', 3.4, 'listener'], ['clinic', 'e_cl_nurse1', 3.0, 'nurse']];
+for (const [area, id, dist, name] of shots) {
+  await page.evaluate((a) => window.__game.loadArea(a, a === 'clinic' ? 'from_town' : a === 'mine' ? 'from_clinic' : 'from_mine'), area);
+  await page.evaluate(([id, dist]) => {
+    const g = window.__game; g.player.invulnerable = 9999;
+    const e = g.enemies.byId(id); e.think = () => {}; e.attackCd = 999;
+    if (e.state !== 'ambush') { e.set('idle'); }
+    // stand in front of it, facing it
+    const fx = -Math.sin(e.yaw), fz = -Math.cos(e.yaw);
+    const d = dist || 4.2;
+    const p = e.pos.clone(); p.x += fx * d; p.z += fz * d;
+    g.level.grid.collide(p, 0.3);
+    const yaw = Math.atan2(-(e.pos.x - p.x), -(e.pos.z - p.z));
+    g.player.spawn(p, yaw); g.rig.yaw = yaw; g.rig.pitch = -0.08;
+  }, [id, dist]);
+  await page.waitForTimeout(3500);
+  await page.screenshot({ path: '/tmp/claude-0/enemy_' + name + '.png' });
+}
+const r = { ok: 1 };
 console.log(JSON.stringify(r, null, 1));
 await b.close(); srv.close();

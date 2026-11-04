@@ -225,6 +225,7 @@ export class Game implements World {
       assets.onProgress = (p) => { bar.style.transform = `scaleX(${p})`; };
     }
     this.hud.fade(1);
+    this.hud.clearTransient();
     await new Promise((r) => setTimeout(r, 30));
     // tear down
     audio.stopAll();

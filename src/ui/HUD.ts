@@ -123,6 +123,9 @@ export class HUD {
     (s.querySelector('.sbar i') as HTMLElement).style.transform = `scaleX(${v})`;
   }
 
+  /** Clears transient text when changing areas. */
+  clearTransient() { this.subT = 0; this.els.subtitle.classList.remove('on'); (this.els.hint as any)._t = 0; this.els.hint.classList.remove('on'); this.toastQ = []; this.renderToasts(); }
+
   fade(v: number) { this.els.fade.style.opacity = String(v); }
   setDamageOverlay(v: number) { this.els['dmg-overlay'].style.opacity = String(v); }
   setFps(f: number | null) { this.els.fps.textContent = f === null ? '' : `${Math.round(f)} FPS`; }

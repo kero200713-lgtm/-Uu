@@ -121,7 +121,7 @@ export function characterMaterial(variant: string, glowColor = 0x5fe8d0, glowStr
   const tex = (n: string, srgb = false) => { const t = assets.texture(`textures/characters/${variant}_${n}.jpg`, srgb, false); t.flipY = false; return t; };
   m = new THREE.MeshStandardMaterial({
     map: tex('albedo', true), normalMap: tex('normal'), roughnessMap: tex('rough'),
-    emissiveMap: tex('glow'), emissive: new THREE.Color(glowColor), emissiveIntensity: variant === 'player' ? 0 : 0.55 * glowStrength,
+    emissiveMap: tex('glow'), emissive: new THREE.Color(glowColor), emissiveIntensity: variant === 'player' ? 0 : 0.45 * glowStrength,
     roughness: 1, metalness: 0,
   });
   patchCharacter(m, variant === 'player' ? 0.32 : 0.16);
