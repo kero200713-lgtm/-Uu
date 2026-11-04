@@ -1,0 +1,18 @@
+import { chromium } from 'playwright';
+import http from 'http'; import fs from 'fs'; import path from 'path';
+const ROOT = path.resolve('dist');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.mp3': 'audio/mpeg', '.woff2': 'font/woff2' };
+const srv = http.createServer((q, res) => { let p = decodeURIComponent(q.url.split('?')[0]); if (p === '/') p = '/index.html'; fs.readFile(path.join(ROOT, p), (e, d) => { if (e) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' }); res.end(d); }); }).listen(0);
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await b.newPage({ viewport: { width: 960, height: 440 } });
+page.on('pageerror', (e) => console.log('pageerror', e.message));
+await page.addInitScript(() => localStorage.setItem('ugultu_settings_v1', JSON.stringify({ quality: 'medium', language: 'tr' })));
+await page.goto(`http://localhost:${srv.address().port}/`);
+await page.waitForFunction(() => window.__game && window.__game.state === 'menu', null, { timeout: 120000 });
+await page.evaluate(() => window.__game.newGame());
+await page.waitForFunction(() => window.__game.state === 'play', null, { timeout: 120000 });
+await page.waitForTimeout(1500);
+const out = await page.evaluate(new Function(process.argv[2]));
+console.log(JSON.stringify(out, null, 1));
+if (process.argv[3]) await page.screenshot({ path: process.argv[3] });
+await b.close(); srv.close();
