@@ -104,9 +104,9 @@ const charCache = new Map<string, THREE.MeshStandardMaterial>();
  * baked light pickup (uBake) and a faint fresnel rim so silhouettes stay
  * readable in near darkness without flattening the image.
  */
-function patchCharacter(m: THREE.MeshStandardMaterial, rim: number) {
+export function patchCharacter(m: THREE.MeshStandardMaterial, rim: number, bake?: { value: THREE.Color }) {
   m.userData.rim = rim;
-  m.userData.bake = { value: new THREE.Color(0.02, 0.02, 0.025) };
+  m.userData.bake = bake || { value: new THREE.Color(0.02, 0.02, 0.025) };
   const uPhase = { value: Math.random() * 6.28 }, uRim = { value: rim };
   m.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, { uTime: shared.uTime, uHum: shared.uHum, uBake: m.userData.bake, uPhase, uRim });

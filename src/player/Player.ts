@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { dressGarments } from './Garments';
 import { createHuman, Human } from './CharacterFactory';
 import { Animator } from './Animator';
 import { CameraRig } from './CameraRig';
@@ -209,6 +210,8 @@ export class Player implements PlayerLike {
   async init(scene: THREE.Scene) {
     this.human = await createHuman({ sex: 'f', variant: 'player', hair: 'long', hairColor: 0x2b1b12, hairCap: true, eyes: 'normal', glow: 0 });
     this.inflateClothes(this.human.body);
+    // real garments over the body (jacket, jeans, boots) instead of paint on the skin
+    for (const gm of dressGarments(this.human.body, this.human.bodyMat.userData.bake)) { this.human.body.parent!.add(gm); this.human.meshes.push(gm); }
     this.human.bodyMat.color.setScalar(1.12); // keep Ela readable in very dark scenes
     this.root.add(this.human.root);
     this.anim = new Animator(this.human.model);
@@ -265,13 +268,17 @@ export class Player implements PlayerLike {
     const aim = sp.clone().addScaledVector(right, -0.075); aim.y += 0.06; // her left, upper chest
     // front-most skinned vertex of the jacket around that spot (a Raycaster would test the
     // compressed mesh's unskinned bounds and miss)
-    const body = this.human.body, P = body.geometry.attributes.position, v = new THREE.Vector3(), d = new THREE.Vector3();
+    // (the jacket shell counts too: the lamp clips onto the outside of the jacket)
+    const v = new THREE.Vector3(), d = new THREE.Vector3();
     let best = -Infinity;
-    for (let i = 0; i < P.count; i++) {
-      body.getVertexPosition(i, v); v.applyMatrix4(body.matrixWorld);
-      d.subVectors(v, aim); const along = d.dot(fwd);
-      d.addScaledVector(fwd, -along);
-      if (d.lengthSq() < 0.035 * 0.035 && along > best) best = along;
+    for (const mesh of [this.human.body, ...this.human.meshes.filter((m) => m.name === 'garment_jacket')]) {
+      const P = mesh.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++) {
+        mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld);
+        d.subVectors(v, aim); const along = d.dot(fwd);
+        d.addScaledVector(fwd, -along);
+        if (d.lengthSq() < 0.035 * 0.035 && along > best) best = along;
+      }
     }
     const surface = aim.clone().addScaledVector(fwd, best > -1 ? best : 0.14);
     // lamp axis: forward, a little down and outward; base resting on the jacket
@@ -480,15 +487,16 @@ export class Player implements PlayerLike {
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = Math.abs(x);
       let k = 0;
-      if (y > 0.885 && y < 1.47 && ax < 0.6) k = 0.014;          // jacket torso + arms (hem ~0.87 m)
+      if (y > 0.93 && y < 1.47 && ax < 0.6) k = 0.014;            // jacket torso + arms (hem 0.93 m, see Garments.HEM)
       if (y > 1.36 && y < 1.47 && ax > 0.17 && ax < 0.58) k = 0.012;
-      if (y <= 0.885 && y > 0.17) k = 0.007;                       // trousers
+      if (y <= 0.93 && y > 0.17) k = 0.007;                         // trousers
       if (y <= 0.17) k = 0.011;                                    // boots
       if (y > 1.4 && ax < 0.08 && z > 0) k = 0;                    // neck/collar opening
       // back to the mesh's own frame
       arr[i * 3] = (x + n.getX(i) * k) / s; arr[i * 3 + 1] = (y + n.getY(i) * k - oy) / s; arr[i * 3 + 2] = (z + n.getZ(i) * k - oz) / s;
     }
     const g2 = geo.clone();
+    g2.userData.frame = { s, oy, oz }; // normalised mesh frame -> bind metres (used by the garments)
     g2.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     g2.setAttribute('normal', n);
     g2.boundingSphere = geo.boundingSphere;
