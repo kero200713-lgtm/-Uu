@@ -92,7 +92,7 @@ export const forest: AreaDef = {
     { type: 'prop', pack: 'interior', name: 'Chair_1', at: [3.8, 35.5], rot: 120 },
     { type: 'prop', pack: 'interior', name: 'Bed_Single', at: [2.6, 36.6], rot: 90, solid: true },
     { type: 'prop', pack: 'interior', name: 'Shelf_Small1', at: [4.3, 34.2], rot: 180 },
-    { type: 'prop', pack: 'items', name: 'Torch', at: [3.0, 34.9], h: 0.72, rot: 30 },
+    { type: 'prop', pack: 'items', name: 'Torch', at: [3.0, 34.9], h: 0.755, rot: 30, tilt: 90 }, // lying on the table
     { type: 'doc', id: 'd_ranger', doc: 'ranger_log', at: [3.25, 35.1], h: 0.74, rot: 80 },
     { type: 'item', id: 'i_cabin_battery', item: 'battery', at: [2.4, 34.4] },
     { type: 'item', id: 'i_cabin_knife', item: 'knife', at: [4.2, 34.25], h: 0.9 },

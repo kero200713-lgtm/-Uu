@@ -81,11 +81,11 @@ export class Animator {
   legs(name: string, o: PlayOpts = {}) { return this.lower.play(name, o); }
   arms(name: string, o: PlayOpts = {}) { return this.upper.play(name, { ...o, sync: o.sync ?? false }, this.lower.current); }
   /**
-   * Bones that get procedural offsets on top of the clips (aim pitch, hip twist).
-   * Not every clip animates them (root/pelvis tracks are stripped offline), and a
-   * bone no active clip touches keeps last frame's value, so an offset applied
-   * every frame would pile up and spin the torso. They are reset to their bind
-   * pose before each mixer update; clips that do animate them override that.
+   * Bones that get procedural changes on top of the clips (aim, IK, grip, flinch).
+   * three's PropertyMixer only writes a bone when the clip value differs from what it
+   * wrote last frame, so on a static pose (an aim clip) a procedural change would
+   * survive into the next frame and pile up (the torso spin, IK drift). Before each
+   * mixer update these bones get back exactly what the mixer gave them last time.
    */
   private rest = new Map<THREE.Bone, THREE.Quaternion>();
   procedural(...names: string[]) {
@@ -94,6 +94,7 @@ export class Animator {
   update(dt: number) {
     for (const [b, q] of this.rest) b.quaternion.copy(q);
     this.mixer.update(dt);
+    for (const [b, q] of this.rest) q.copy(b.quaternion);
   }
   bone(name: string) { return this.bones.get(name); }
 }

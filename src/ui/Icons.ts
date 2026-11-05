@@ -25,6 +25,7 @@ const P: Record<string, string> = {
   aim: '<circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
   fire: '<circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="9"/>',
   reload: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  run: '<circle cx="14" cy="4.5" r="2"/><path d="M10 9l4-1 2 4 3 1M14 8l-2 6 3 3v4M12 14l-3 3-4-1M8 11l2-2"/>',
   crouch: '<circle cx="12" cy="5" r="2"/><path d="M12 8v5l-4 3v4M12 13l4 1 1 6M8 11l4-1"/>',
   flash: '<path d="M7 3h10l-2 6H9z"/><path d="M9 9h6v12H9zM12 13v3"/>',
   bag: '<path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',

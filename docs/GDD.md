@@ -64,7 +64,7 @@ Kamera: omuz üstü, duvar çarpışmalı (küre süpürme + yumuşak geri dön�
 | Çakı | — | tek kullanım | — | — | Yakalanınca otomatik kurtarır |
 | İşaret fişeği | — | — | atış | yüksek | Işık + ses: düşmanları çeker/oyalar |
 
-Kafaya isabet tüm silahlarda ×2.2 hasar verir.
+Kafaya isabet tüm silahlarda ×3 hasar verir (tek tabanca mermisi bir Oyuk'u düşürür) ve kafa geriye savrulur; gövde isabetleri gövdeyi sarsar, sendeletme eşiğini geçerse saldırıyı keser.
 
 Geri bildirim: isabet sesi + kan/kıvılcım parçacığı, düşmanın sendelemesi/yere düşmesi, kamera sarsıntısı (ayarlanabilir), titreşim (ayarlanabilir), isabet işareti (öldürme ve kafa vuruşu için ayrı renk), atış sonrası nişangâhın açılması.
 

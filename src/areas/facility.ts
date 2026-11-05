@@ -106,7 +106,7 @@ export const facility: AreaDef = {
     { type: 'prop', pack: 'facility', name: 'Props_Capsule', at: [29.8, 14.0], solid: true },
     { type: 'light', at: [29.8, 14.0], h: 1.0, color: 0x5fe8d0, intensity: 2.5, range: 4, flicker: 'pulse', bake: 0.5 },
     { type: 'prop', pack: 'facility', name: 'Props_ComputerSmall', at: [22.8, 14.4], rot: 90, solid: true },
-    { type: 'prop', pack: 'items', name: 'Radio', at: [25.9, 15.2], h: 0.58, rot: 20 },
+    { type: 'prop', pack: 'items', name: 'Radio', at: [26.2, 15.3], h: 0.58, rot: 20 },
     { type: 'item', id: 'i_tape', item: 'tape_inverse', at: [26.8, 15.6], h: 0.58 },
     { type: 'doc', id: 'd_kemal_tape2', doc: 'kemal_tape2', at: [27.3, 15.1], h: 0.58, rot: 40 },
     { type: 'item', id: 'i_fc_adren', item: 'adrenaline', at: [22.8, 17.8] },

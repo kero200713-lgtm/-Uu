@@ -76,11 +76,11 @@ export class LightPool {
     scene.add(this.group);
   }
 
-  add(a: LightAnchor, glow = true, cone = false, coneHeight = 3) {
+  add(a: LightAnchor, glow = true, cone = false, coneHeight = 3, glowSize = 0.9) {
     this.anchors.push(a);
     if (glow) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: a.color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-      s.position.copy(a.pos); s.scale.setScalar(0.9);
+      s.position.copy(a.pos); s.scale.setScalar(glowSize);
       a.glow = s; this.group.add(s);
     }
     if (cone) {

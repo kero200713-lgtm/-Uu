@@ -17,7 +17,7 @@ import { preloadHumans, setHair } from './player/CharacterFactory';
 import { EnemyManager } from './enemies/Types';
 import { FX } from './combat/FX';
 import { noise } from './combat/Noise';
-import { fireWeapon, meleeSwing, meleeFacing, aimAssist, CombatCtx } from './combat/Combat';
+import { fireWeapon, meleeSwing, meleeFacing, aimAssist, crosshairPoint, CombatCtx } from './combat/Combat';
 import { audio, Voice } from './audio/AudioEngine';
 import { HUD } from './ui/HUD';
 import { TouchControls } from './ui/TouchControls';
@@ -62,6 +62,7 @@ export class Game implements World {
   private triggered = new Set<string>();
   cine: { t: number; dur: number; from: THREE.Vector3; to: THREE.Vector3; look: THREE.Vector3; done?: () => void } | null = null;
   private suspendT = 0;
+  private lookIdle = 9;
   private autoT = 0;
   private menuBg = false;
   private spotted = new Set<string>();
@@ -83,7 +84,7 @@ export class Game implements World {
     this.touch = new TouchControls(uiRoot);
     this.screens = new Screens(uiRoot);
     input.attachKeyboardMouse(canvas);
-    (window as any).__game = this; (window as any).__audio = audio; (window as any).__assets = assets; (window as any).__THREE = THREE;
+    (window as any).__game = this; (window as any).__audio = audio; (window as any).__assets = assets; (window as any).__THREE = THREE; (window as any).__input = input;
   }
 
   // -------------------------------------------------------------- boot ---
@@ -557,9 +558,19 @@ export class Game implements World {
     return best;
   }
 
+  /** True when a barricaded (jammed) door is approached from its indoor side. */
+  private barricadeInside(it: Interactable) {
+    const d = it.door; if (!d || !d.locked || !(it.def as DoorDef).jammed) return false;
+    const g = this.level.grid, [cx, cy] = d.cell, [px, py] = g.cellOf(this.player.pos.x, this.player.pos.z);
+    // the door's neighbour along its passage axis on the player's side must be indoors
+    const dx = Math.sign(px - cx), dy = Math.sign(py - cy);
+    const pSide = d.axisX ? g.info(cx, cy + dy) : g.info(cx + dx, cy);
+    return (d.axisX ? dy : dx) !== 0 && !!pSide.indoor;
+  }
+
   promptFor(it: Interactable): string {
     switch (it.kind) {
-      case 'door': return t('p_open');
+      case 'door': return this.barricadeInside(it) ? (settings.data.language === 'tr' ? 'Barikatı kaldır' : 'Clear the barricade') : t('p_open');
       case 'exit': return L((it.def as ExitDef).prompt) || t('p_go');
       case 'item': { const d = ITEMS[it.def.item]; return `${t('p_take')}: ${d ? L(d.name) : it.def.item}`; }
       case 'doc': return (it.def.doc as string).startsWith('tape') || (it.def.doc as string).startsWith('kemal_tape') ? t('p_listen') : t('p_read');
@@ -576,7 +587,14 @@ export class Game implements World {
       case 'door': {
         const d = it.door!; const def = it.def as DoorDef;
         if (d.locked) {
-          if (def.jammed) { audio.play('door_locked', { pos: it.pos, volume: 0.8 }); this.hudMessage(L(def.jammed)); return; }
+          if (def.jammed && this.barricadeInside(it)) {
+            // from the inside the barricade can be pulled away: a shortcut back out
+            this.player.playInteract('mid');
+            audio.play('door_unlock', { pos: it.pos, volume: 0.7 }); audio.proc?.rustle(0.4, 0.5);
+            await new Promise((r) => setTimeout(r, 600));
+            d.locked = false; this.flags.add('unlock:' + d.id);
+            this.hudMessage(tr ? 'Barikatı kaldırdın.' : 'You cleared the barricade.');
+          } else if (def.jammed) { audio.play('door_locked', { pos: it.pos, volume: 0.8 }); this.hudMessage(L(def.jammed)); return; }
           if (def.lock && inv.hasKey(def.lock)) {
             d.locked = false; this.flags.add('unlock:' + d.id);
             if (def.consume) inv.removeKey(def.lock);
@@ -702,10 +720,14 @@ export class Game implements World {
     const p = this.player;
     // camera look
     if (this.state === 'play') this.rig.addLook(input.look.x, input.look.y);
+    this.lookIdle = Math.hypot(input.look.x, input.look.y) > 0.5 ? 0 : this.lookIdle + dt;
     const controls = this.state === 'play' && !this.hold;
     const wasAim = p.aiming;
+    p.aimTarget = p.firearm && this.level && !this.rig.cinematic ? crosshairPoint(this.combatCtx(), p.aimTarget || new THREE.Vector3()) : null;
     p.update(dt, this.rig, controls);
-    if (p.aiming) aimAssist(this.combatCtx(), dt, !wasAim);
+    // aim assist never fights the player's own camera movement: it snaps when the
+    // weapon is raised and afterwards only nudges once the camera has been still a moment
+    if (p.aiming && (!wasAim || this.lookIdle > 0.4)) aimAssist(this.combatCtx(), dt, !wasAim);
     if (!p.firearm && input.aimToggled) input.aimToggled = false;
     // interaction
     this.focus = this.state === 'play' ? this.findFocus() : null;
@@ -850,6 +872,7 @@ export class Game implements World {
       firearm: p.firearm, aiming: p.aiming, interact: this.state === 'play' ? prompt : null,
       canReload: p.firearm && (inv.mags[inv.equipped] ?? 0) < (w?.weapon?.mag ?? 0) && inv.reserveAmmo(inv.equipped) > 0,
       crouching: p.crouching, healAvail, weaponIcon: w ? w.icon : 'hand', flashOn: p.flashOn, grabbed: !!p.grabbedBy,
+      weaponName: w ? L(w.name) : '', weaponCount: inv.weapons.length, running: input.runToggled,
     });
   }
 }

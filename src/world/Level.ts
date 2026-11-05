@@ -22,15 +22,17 @@ export interface Interactable {
 const INDOOR_WALL: Record<string, string> = { w: 'wallpaper', t: 'plaster', k: 'plaster', c: 'concrete', m: 'metal_painted', q: 'rock' };
 const CEILING: Record<string, string> = { w: 'plaster', t: 'ceiling', k: 'plaster', c: 'concrete', m: 'metal_painted', q: 'rock' };
 
+/** Models authored at the wrong real-world size. */
+const DEFAULT_SCALE: Record<string, number> = { Light_Floor1: 1.95 };
+
 /** Furniture islands for room dressing: [model, x, z (metres), rotation (deg, front +Z), scale]. */
 type Piece = [string, number, number, number, number, number?];
 const LOUNGE: Piece[] = [['Carpet_1', 0, 0, 90, 1.8], ['Couch_Medium1', 0, -1.0, 0, 1], ['Table_RoundSmall', 0, 0.35, 0, 1], ['Light_Floor1', 1.45, -1.0, 0, 1], ['Houseplant_1', -1.45, -0.95, 0, 1]];
 const DINING: Piece[] = [['Table_RoundLarge', 0, 0, 0, 1], ['Chair_1', -0.5, 0.62, 180, 1], ['Chair_2', 0.5, 0.62, 180, 1], ['Chair_1', -0.5, -0.62, 0, 1], ['Chair_2', 0.5, -0.62, 0, 1]];
 const READING: Piece[] = [['Carpet_1', 0, 0, 0, 1.5], ['Couch_Small1', 0, -0.6, 0, 1], ['NightStand_1', 1.0, -0.6, 0, 1], ['Light_Floor1', -1.05, -0.7, 0, 1]];
-const AISLE: Piece[] = [['Shelf_Large', 0, -0.22, 180, 1], ['Shelf_Large', 0, 0.22, 0, 1]];
 const DESK: Piece[] = [['Table_RoundLarge', 0, 0, 0, 1], ['Chair_1', 0, 0.62, 180, 1], ['Light_Desk', 0.6, 0, 0, 1, 0.56], ['Drawer_1', 0, -0.95, 0, 1]];
 const GROUPS: Record<string, Piece[][]> = {
-  living: [LOUNGE, DINING, READING], bedroom: [READING], kitchen: [DINING], store: [AISLE, AISLE, DINING], office: [DESK, DESK, LOUNGE],
+  living: [LOUNGE, DINING, READING], bedroom: [READING], kitchen: [DINING], office: [DESK, DESK, LOUNGE],
 };
 
 class GeoBuilder {
@@ -112,15 +114,38 @@ export class Level {
 
     // ---------- lights ----------
     const bakeLights: BakeLight[] = [];
+    const ceilH0 = def.ceiling ?? 3;
     for (const e of ents) if (e.type === 'light') {
       const L = e as LightDef;
-      const h = L.h ?? 2.7;
+      let h = L.h ?? 2.7;
+      const [lx, ly] = [Math.floor(L.at[0]), Math.floor(L.at[1])];
+      if (!L.model && g.info(lx, ly).indoor) {
+        if (h >= 1.6) {
+          // a real fixture on the ceiling; the light hangs below it, never against the ceiling
+          // (lights a few cm from a surface blew past the HDR range -> sparkling coloured dots)
+          h = Math.min(h, ceilH0 - 0.42);
+          ents.push({ type: 'prop', pack: 'interior', name: 'Light_CeilingSingle', at: L.at, h: ceilH0 - 0.24, solid: false } as PropDef);
+        } else {
+          // a low light is a lamp standing on something (or a floor lamp)
+          const sup = this.findSupport(ents, L.at[0], L.at[1], 1.2);
+          if (sup) {
+            L.at = [sup.x, sup.y];
+            ents.push({ type: 'prop', pack: 'interior', name: 'Light_Desk', at: [sup.x, sup.y], h: sup.top, rot: (sup.x * 97) % 360, solid: false } as PropDef);
+            h = sup.top + 0.24;
+          } else {
+            ents.push({ type: 'prop', pack: 'interior', name: 'Light_Floor1', at: L.at, solid: false } as PropDef);
+            h = 1.45;
+          }
+        }
+      }
       const pos = this.w(L.at[0], L.at[1], h);
       const col = new THREE.Color(L.color ?? 0xffd9a8);
       const a = new LightAnchor(pos, col, L.intensity ?? 6, L.range ?? 9, L.flicker || 'none');
       a.id = L.id; a.on = !(L.off) && !(L.id && flags.has('off:' + L.id));
       if (L.id && flags.has('on:' + L.id)) a.on = true;
-      pool.add(a, true, !!L.cone && q.lightCones, h);
+      const indoorL = !!g.info(lx, ly).indoor;
+      // indoors only a small halo at the bulb of the fixture (a big glow ball read as a floating blob)
+      pool.add(a, !indoorL || !!L.model || h > 1.6, !!L.cone && q.lightCones, h, indoorL ? 0.32 : 0.9);
       this.anchors.push(a);
       bakeLights.push({ x: pos.x, y: pos.y, z: pos.z, color: col, intensity: a.on ? (L.intensity ?? 6) : 0, range: (L.range ?? 9) * 1.4, bake: L.bake ?? 1 });
       if (L.model) {
@@ -130,12 +155,13 @@ export class Level {
     }
 
     // ---------- solid props first (they shape AO & nav) ----------
-    const propPlacements: { pack: string; name: string; m: THREE.Matrix4; solid: boolean }[] = [];
+    const propPlacements: { pack: string; name: string; m: THREE.Matrix4; solid: boolean; reqH?: number; yOff?: number }[] = [];
     let flatCount = 0;
     const placeProp = (p: PropDef) => {
       const pg = assets.prop(p.pack, p.name);
       if (!pg) { console.warn('missing prop', p.pack, p.name); return; }
-      const s = p.scale ?? 1;
+      const s = p.scale ?? DEFAULT_SCALE[p.name] ?? 1;
+      if (p.pack === 'interior' && pg.size.y * s > 1.2 && !/Curtain|Light_|Column|Door|Window/.test(p.name)) this.toWall(p, pg.size.z * s);
       const rot = THREE.MathUtils.degToRad(p.rot ?? 0);
       // paper-thin ground decals (blood pools) would z-fight with the floor: lift them a
       // few mm, each a little more than the last so overlapping ones don't fight either
@@ -143,7 +169,9 @@ export class Level {
       const pos = this.w(p.at[0], p.at[1], (p.h ?? 0) + lift);
       const m = new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromEuler(new THREE.Euler(p.tilt ? THREE.MathUtils.degToRad(p.tilt) : 0, rot, 0)), new THREE.Vector3(s, s, s));
       const solid = p.solid ?? (pg.size.y * s > 0.6 && Math.max(pg.size.x, pg.size.z) * s > 0.5);
-      propPlacements.push({ pack: p.pack, name: p.name, m, solid });
+      propPlacements.push({ pack: p.pack, name: p.name, m, solid, reqH: p.h ?? 0, yOff: lift + (p.tilt ? Math.min(pg.size.x, pg.size.z) * s / 2 : 0) });
+      const wb = new THREE.Box3(pg.min.clone(), pg.max.clone()).applyMatrix4(m);
+      if (pg.size.y * s > 0.25 && !p.tilt && (p.h ?? 0) < 1.6) this.supports.push({ minX: wb.min.x, maxX: wb.max.x, minZ: wb.min.z, maxZ: wb.max.z, top: wb.max.y, m, name: p.pack + '/' + p.name });
       if (solid) {
         // collide with what a person would bump into (the part below ~1.1 m), not the
         // whole bounding box: lamp arms, tree crowns, sign boards are no invisible walls
@@ -159,6 +187,16 @@ export class Level {
     }
     for (const e of ents) if (e.type === 'scatter') this.scatter(e as ScatterDef, q, propPlacements);
     if (def.dress) this.dressRooms(ents, placeProp);
+    // things put "on" something (h > 0) sit exactly on what is really under them, or
+    // on the floor when nothing is (nothing floats)
+    for (const pp of propPlacements) {
+      if (!pp.reqH || pp.reqH < 0.05 || pp.reqH >= 1.6) continue; // higher = hung on a wall/ceiling
+      if (pp.pack !== 'interior' && pp.pack !== 'items') continue;  // wall pipes, vents, fallen trees keep their height
+      const v = new THREE.Vector3().setFromMatrixPosition(pp.m);
+      const top = this.supportTop(v.x, v.z, pp.reqH, pp.m);
+      const y = (top ?? 0) + (pp.yOff ?? 0);
+      if (Math.abs(y - v.y) > 0.004) { pp.m.elements[13] = y; this.floatFixes.push(`${pp.name} ${pp.reqH.toFixed(2)} -> ${y.toFixed(2)}`); }
+    }
 
     const env = def.env;
     this.baker = new Baker(g, bakeLights, new THREE.Color(env.ambient).multiplyScalar(6), env.outdoor ? 1.6 : 1);
@@ -423,6 +461,62 @@ export class Level {
         });
       }
     }
+  }
+
+  /** Tops of placed furniture (world XZ box + top height), for putting things on them. */
+  supports: { minX: number; maxX: number; minZ: number; maxZ: number; top: number; m: THREE.Matrix4; name?: string }[] = [];
+  floatFixes: string[] = [];
+  /** Height of the furniture top under (x, z) closest below want + 0.35 m, or null for none. */
+  supportTop(x: number, z: number, want: number, self?: THREE.Matrix4): number | null {
+    let best: number | null = null, inside = false;
+    for (const s of this.supports) {
+      if (s.m === self) continue;
+      if (x < s.minX - 0.04 || x > s.maxX + 0.04 || z < s.minZ - 0.04 || z > s.maxZ + 0.04) continue;
+      if (s.top > want + 0.35) { if (want > 0.05) inside = true; continue; } // on an inner shelf of a tall piece
+      if (best === null || s.top > best) best = s.top;
+    }
+    if (inside && (best === null || best < want - 0.35)) return want;
+    return best;
+  }
+  /** A table/drawer/nightstand among the authored props near (x, y) cells: its centre and top. */
+  private findSupport(ents: EntityDef[], x: number, y: number, maxCells: number) {
+    let best: { x: number; y: number; top: number; d: number } | null = null;
+    for (const e of ents) {
+      if (e.type !== 'prop') continue;
+      const p = e as PropDef;
+      if (!/Table|Drawer|NightStand|Kitchen_2Drawers|Desk/.test(p.name)) continue;
+      const pg = assets.prop(p.pack, p.name); if (!pg) continue;
+      const d = Math.hypot(p.at[0] - x, p.at[1] - y);
+      if (d > maxCells || (best && d > best.d)) continue;
+      best = { x: p.at[0], y: p.at[1], top: (p.h ?? 0) + pg.size.y * (p.scale ?? 1), d };
+    }
+    return best;
+  }
+  /**
+   * Tall furniture (shelves, wardrobes, fridges) never stands free in a room: it is
+   * moved to the nearest wall within 2.5 cells, back against it, facing the room.
+   */
+  private toWall(p: PropDef, depth: number) {
+    const g = this.grid, T = this.T;
+    let best: { d: number; dx: number; dy: number; face: number } | null = null;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (let k = 0; k <= 3; k++) {
+        const cx = Math.floor(p.at[0]) + dx * k, cy = Math.floor(p.at[1]) + dy * k;
+        const inf = g.info(cx, cy);
+        if (inf.kind === 'wall' && !inf.thin) {
+          const face = dx > 0 ? cx : dx < 0 ? cx + 1 : dy > 0 ? cy : cy + 1; // wall face line (cells)
+          const d = Math.abs((dx !== 0 ? p.at[0] : p.at[1]) - face);
+          if (d <= 2.5 && (!best || d < best.d)) best = { d, dx, dy, face };
+          break;
+        }
+        if (inf.kind !== 'floor') break;
+      }
+    }
+    if (!best) return;
+    const off = (depth / 2 + 0.04) / T;
+    if (best.dx !== 0) p.at = [best.face - best.dx * off, p.at[1]];
+    else p.at = [p.at[0], best.face - best.dy * off];
+    p.rot = (Math.atan2(-best.dx, -best.dy) * 180) / Math.PI; // models face +Z: turn away from the wall
   }
 
   private footCache = new Map<string, THREE.Box3>();
@@ -800,6 +894,7 @@ export class Level {
         const d = e as ItemDef | DocDef;
         if (flags.has('took:' + d.id)) return;
         const pos = this.w(d.at[0], d.at[1], d.h ?? 0);
+        pos.y = this.supportTop(pos.x, pos.z, d.h ?? 0) ?? 0;
         let obj: THREE.Object3D;
         if (e.type === 'doc') {
           const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.32), new THREE.MeshStandardMaterial({ color: 0xd8d0bc, roughness: 0.9, emissive: 0x18160f }));
@@ -835,7 +930,15 @@ export class Level {
       }
       case 'save': {
         const s = e as SaveDef;
-        const pos = this.w(s.at[0], s.at[1], 0.85);
+        const pos = this.w(s.at[0], s.at[1], 0);
+        // the radio stands on the furniture there; without any, on a small crate
+        let top = this.supportTop(pos.x, pos.z, 1.2);
+        if (top === null) {
+          const cr = assets.prop('interior', 'NightStand_1') || assets.prop('urban', 'Barrel');
+          if (cr) { const k = 0.7 / Math.max(0.1, cr.size.y); const m = new THREE.Mesh(cr.geometry, dynamicPropMaterial()); m.scale.setScalar(k); m.position.copy(pos).add(new THREE.Vector3(0, 0, 0)); m.rotation.y = ((s.dir ?? 0) * Math.PI) / 180; this.root.add(m); top = 0.7; }
+          else top = 0;
+        }
+        pos.y = top;
         const pg = assets.prop('items', 'Radio');
         const obj = pg ? new THREE.Mesh(pg.geometry, dynamicPropMaterial()) : new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.15));
         obj.position.copy(pos); obj.rotation.y = ((s.dir ?? 0) * Math.PI) / 180;

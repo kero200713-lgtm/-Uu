@@ -69,6 +69,15 @@ check('joystick moves the player', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 0.8, J
 check('camera drag turns the view while moving', Math.abs(p1.yaw - p0.yaw) > 0.05, `dyaw=${(p1.yaw - p0.yaw).toFixed(3)}`);
 await page.waitForFunction(() => Math.hypot(window.__game.player.vel.x, window.__game.player.vel.z) < 0.6, null, { timeout: 20000 }).catch(() => {});
 check('joystick released', await G(() => Math.hypot(window.__game.player.vel.x, window.__game.player.vel.z) < 0.6));
+// sprint is a button now (a fully pushed stick is a normal run)
+await tap('.tb-run');
+await touch('touchStart', [L]);
+for (let i = 1; i <= 6; i++) { await touch('touchMove', [{ ...L, y: L.y - i * 14 }]); await page.waitForTimeout(30); }
+await page.waitForFunction(() => window.__game.player.running, null, { timeout: 20000 }).catch(() => {});
+check('sprint button makes Ela sprint', await G(() => window.__game.player.running));
+await touch('touchEnd', []);
+await page.waitForTimeout(400);
+check('releasing the stick ends the sprint', await G(() => !window.__input?.runToggled && !window.__game.player.running));
 
 // ---- contextual / top buttons
 const f0 = await G(() => window.__game.player.flashOn);

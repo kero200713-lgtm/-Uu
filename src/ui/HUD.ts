@@ -87,6 +87,9 @@ export class HUD {
   }
 
   toast(text: string, ic?: string) {
+    // the same message again only refreshes it (repeated taps on a locked door stacked copies)
+    const same = this.toastQ.find((q) => q.text === text);
+    if (same) { same.ttl = 2.6; return; }
     this.toastQ.push({ text, ttl: 2.6, icon: ic });
     if (this.toastQ.length > 3) this.toastQ.shift();
     this.renderToasts();

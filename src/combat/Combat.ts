@@ -85,6 +85,21 @@ export function meleeSwing(c: CombatCtx, w: WeaponDef, yaw: number) {
   if (hit) { audio.play('hit', { volume: 0.9 }); c.rig.shake(0.18); bus.emit('hitmarker', false, false); bus.emit('hitstop', 0.07); }
 }
 
+/** The world point under the crosshair (same trace as a shot, no spread), max 40 m. */
+export function crosshairPoint(c: CombatCtx, out = new THREE.Vector3()) {
+  const o = c.cam.position, dir = new THREE.Vector3(0, 0, -1).applyQuaternion(c.cam.quaternion);
+  const start = Math.max(0, o.distanceTo(c.playerPos) - 0.2);
+  const from = o.clone().addScaledVector(dir, start);
+  const horiz = Math.hypot(dir.x, dir.z) || 1e-6, R = 40;
+  const wallT = c.level.grid.raycast(from.x, from.z, dir.x, dir.z, R * horiz, BLOCK_SIGHT, true);
+  let t = wallT >= 0 ? wallT / horiz : R;
+  if (dir.y < -0.01) t = Math.min(t, -from.y / dir.y);
+  const ceil = c.level.grid.indoorAt(from.x, from.z) ? (c.level.def.ceiling ?? 3) : 50;
+  if (dir.y > 0.01) t = Math.min(t, (ceil - from.y) / dir.y);
+  for (const e of c.enemies) { const h = e.hitTest(from, dir, t); if (h && h.t < t) t = h.t; }
+  return out.copy(from).addScaledVector(dir, Math.max(2, t));
+}
+
 /** Melee helper: turn toward the closest enemy roughly in front, so a swing on a touch screen connects. */
 export function meleeFacing(c: CombatCtx, yaw: number): number {
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
@@ -110,22 +125,26 @@ export function aimAssist(c: CombatCtx, dt: number, justStarted: boolean) {
   let best: { e: Enemy; ang: number; p: THREE.Vector3 } | null = null;
   for (const e of c.enemies) {
     if (['dead', 'dormant', 'ambush'].includes(e.state) || !e.root.visible) continue;
-    const chest = e.anim.bone('spine_03')?.getWorldPosition(new THREE.Vector3());
-    if (!chest) continue;
-    const to = chest.clone().sub(c.cam.position);
-    const d = to.length(); if (d > 28) continue;
-    const ang = Math.acos(THREE.MathUtils.clamp(to.normalize().dot(fwd), -1, 1));
-    const lim = justStarted ? 0.42 : 0.16;
-    if (ang > lim) continue;
     if (!c.level.grid.lineOfSight(c.playerPos, e.pos, true)) continue;
-    if (!best || ang < best.ang) best = { e, ang, p: chest };
+    // head or chest, whichever the crosshair is already closer to (so lining up a
+    // headshot is helped, not dragged back down to the body)
+    for (const bn of ['Head', 'spine_03']) {
+      const pt = e.anim.bone(bn)?.getWorldPosition(new THREE.Vector3());
+      if (!pt) continue;
+      const to = pt.clone().sub(c.cam.position);
+      const d = to.length(); if (d > 28) continue;
+      const ang = Math.acos(THREE.MathUtils.clamp(to.normalize().dot(fwd), -1, 1));
+      const lim = justStarted ? (bn === 'Head' ? 0.1 : 0.42) : 0.09;
+      if (ang > lim) continue;
+      if (!best || ang < best.ang) best = { e, ang, p: pt };
+    }
   }
   if (!best) return;
   const to = best.p.clone().sub(c.cam.position).normalize();
   const wantYaw = Math.atan2(-to.x, -to.z);
   const wantPitch = Math.asin(THREE.MathUtils.clamp(to.y, -1, 1));
   let dy = wantYaw - c.rig.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
-  const k = justStarted ? 0.85 : Math.min(1, dt * 3.2);
+  const k = justStarted ? 0.85 : Math.min(1, dt * 1.6);
   c.rig.yaw += dy * k;
   c.rig.pitch += (wantPitch - c.rig.pitch) * k * 0.7;
 }

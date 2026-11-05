@@ -84,7 +84,7 @@ export const clinic: AreaDef = {
     { type: 'prop', pack: 'interior', name: 'Couch_Medium1', at: [25, 15.6], rot: 180, solid: true },
     { type: 'prop', pack: 'interior', name: 'Table_RoundSmall', at: [24.5, 17.4], solid: true },
     { type: 'prop', pack: 'interior', name: 'Kitchen_Fridge', at: [28.3, 18.6], rot: -90, solid: true },
-    { type: 'prop', pack: 'interior', name: 'Light_Desk', at: [24.2, 17.3], h: 0.58 },
+    { type: 'prop', pack: 'interior', name: 'Light_Desk', at: [24.42, 17.36], h: 0.58 },
     { type: 'save', id: 'save_clinic', at: [24.9, 17.5], dir: 180 },
     { type: 'item', id: 'i_cl_lounge_flare', item: 'flare', at: [22, 19] },
     // ---------------- nurse station

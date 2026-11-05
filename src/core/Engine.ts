@@ -47,6 +47,9 @@ void main(){
   col.r = texture2D(tScene, uv + d * ca).r;
   col.g = texture2D(tScene, uv).g;
   col.b = texture2D(tScene, uv - d * ca).b;
+  // never let a stray Inf/NaN pixel through (it would show as separate R/G/B dots)
+  if (!(col.r + col.g + col.b < 1.0e4)) col = vec3(0.0);
+  col = min(col, vec3(48.0));
   col += texture2D(tBloom, uv).rgb * uBloom;
   col *= uExposure;
   col = aces(col);

@@ -212,7 +212,10 @@ export class Player implements PlayerLike {
     this.human.bodyMat.color.setScalar(1.12); // keep Ela readable in very dark scenes
     this.root.add(this.human.root);
     this.anim = new Animator(this.human.model);
-    this.anim.procedural('pelvis', 'spine_01', 'spine_02', 'spine_03'); // aim pitch + hip twist offsets
+    // bones changed procedurally every frame: aim, two-hand IK, finger grip
+    this.anim.procedural('pelvis', 'spine_01', 'spine_02', 'spine_03',
+      ...['upperarm', 'lowerarm', 'hand'].flatMap((n) => [n + '_l', n + '_r']),
+      ...['thumb', 'index', 'middle', 'ring', 'pinky'].flatMap((f) => ['01', '02', '03'].flatMap((k) => [`${f}_${k}_l`, `${f}_${k}_r`])));
     this.anim.onFinished((n) => this.onAnimDone(n));
     this.anim.full('Idle_Loop', { fade: 0 });
     scene.add(this.root, this.flash, this.flashTarget, this.flashFill);
@@ -231,6 +234,7 @@ export class Player implements PlayerLike {
     // sights up, grip in the palm (W_Pistol: muzzle +Z, grip at the rear; Shotgun_1: muzzle +X)
     this.fitGun(this.weapons.get('pistol')!, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0.058, -0.07));
     this.fitGun(this.weapons.get('shotgun')!, new THREE.Vector3(1, 0, 0), new THREE.Vector3(-0.2 * 0.8, 0.05 * 0.8, 0));
+    this.captureHands();
     this.anim.full('Idle_Loop', { fade: 0 });
     this.muzzles.pistol = this.muzzle; pistol.add(this.muzzle); this.muzzle.position.set(0, 0.058, 0.12);
     const sm = new THREE.Object3D(); shotgun.add(sm); sm.position.set(0.52, 0.12, 0); this.muzzles.shotgun = sm;
@@ -295,6 +299,130 @@ export class Player implements PlayerLike {
   }
 
   private muzzles: Record<string, THREE.Object3D> = {};
+  /** Point under the crosshair while aiming (set by the game every frame). */
+  aimTarget: THREE.Vector3 | null = null;
+  private gunKick = 0;
+  private gunFit = new Map<THREE.Object3D, { local: THREE.Matrix4; handRel: THREE.Matrix4 }>();
+  private fist = new Map<THREE.Bone, THREE.Quaternion>();
+  private palmSign = { l: 1, r: 1 };
+
+  /** Records a closed-hand pose (from a punch clip) and which side each palm faces. */
+  private captureHands() {
+    this.anim.full('Punch_Cross', { fade: 0 }); this.anim.update(0.02); this.anim.update(0.12);
+    for (const f of ['thumb', 'index', 'middle', 'ring', 'pinky']) for (const n of ['01', '02', '03']) for (const sd of ['l', 'r']) {
+      const b = this.anim.bone(`${f}_${n}_${sd}`); if (b) this.fist.set(b, b.quaternion.clone());
+    }
+    this.anim.full('Idle_Loop', { fade: 0 }); this.anim.update(0.02); this.anim.update(0.1);
+    this.root.updateMatrixWorld(true);
+    const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)), right = new THREE.Vector3().crossVectors(fwd, Player.UP);
+    for (const sd of ['l', 'r'] as const) {
+      const n = this.palmBasis(sd)?.n; if (!n) continue;
+      // hanging arms: palms face the body
+      this.palmSign[sd] = n.dot(right) * (sd === 'l' ? 1 : -1) >= 0 ? 1 : -1;
+    }
+  }
+  /** World finger direction f and palm normal n of a hand. */
+  private palmBasis(sd: 'l' | 'r') {
+    const h = this.anim.bone('hand_' + sd), m = this.anim.bone('middle_01_' + sd), i = this.anim.bone('index_01_' + sd), p = this.anim.bone('pinky_01_' + sd);
+    if (!h || !m || !i || !p) return null;
+    const hp = h.getWorldPosition(new THREE.Vector3());
+    const f = m.getWorldPosition(new THREE.Vector3()).sub(hp);
+    const palm = f.length() * 0.55;
+    f.normalize();
+    const side = i.getWorldPosition(new THREE.Vector3()).sub(p.getWorldPosition(new THREE.Vector3()));
+    const n = new THREE.Vector3().crossVectors(f, side).normalize().multiplyScalar(this.palmSign[sd]);
+    return { f, n, palm, hp };
+  }
+  private applyGrip(right: number, left: number) {
+    for (const [b, q] of this.fist) {
+      const r = b.name.endsWith('_r'), w = r ? right : left;
+      if (w <= 0) continue;
+      b.quaternion.slerp(q, b.name.startsWith('index') && r ? w * 0.55 : w); // trigger finger half straight
+    }
+  }
+  private setWorldQuat(b: THREE.Object3D, q: THREE.Quaternion) {
+    b.quaternion.copy(b.parent!.getWorldQuaternion(_qa).invert().multiply(q));
+  }
+  /** Analytic two-bone IK (shoulder-elbow-wrist) with an elbow pole. */
+  private ik(a: string, b: string, c: string, t: THREE.Vector3, pole: THREE.Vector3) {
+    const A = this.anim.bone(a), B = this.anim.bone(b), C = this.anim.bone(c);
+    if (!A || !B || !C) return;
+    const pa = A.getWorldPosition(new THREE.Vector3()), pb = B.getWorldPosition(new THREE.Vector3()), pc = C.getWorldPosition(new THREE.Vector3());
+    const lab = pa.distanceTo(pb), lcb = pb.distanceTo(pc);
+    const lat = THREE.MathUtils.clamp(pa.distanceTo(t), 0.02, lab + lcb - 0.002);
+    const ang = (u: THREE.Vector3, v: THREE.Vector3) => Math.acos(THREE.MathUtils.clamp(u.clone().normalize().dot(v.clone().normalize()), -1, 1));
+    const ac = pc.clone().sub(pa), ab = pb.clone().sub(pa), ba = pa.clone().sub(pb), bc = pc.clone().sub(pb), at = t.clone().sub(pa);
+    const acab0 = ang(ac, ab), babc0 = ang(ba, bc), acat0 = ang(ac, at);
+    const acab1 = Math.acos(THREE.MathUtils.clamp((lcb * lcb - lab * lab - lat * lat) / (-2 * lab * lat), -1, 1));
+    const babc1 = Math.acos(THREE.MathUtils.clamp((lat * lat - lab * lab - lcb * lcb) / (-2 * lab * lcb), -1, 1));
+    let axis0 = new THREE.Vector3().crossVectors(ac, ab);
+    if (axis0.lengthSq() < 1e-8) axis0.crossVectors(ac, pole.clone().sub(pa));
+    axis0.normalize();
+    const axis1 = new THREE.Vector3().crossVectors(ac, at);
+    this.rotWorld(B, axis0, babc1 - babc0);
+    if (axis1.lengthSq() > 1e-10) this.rotWorld(A, axis1.normalize(), acat0);
+    this.rotWorld(A, axis0, acab1 - acab0);
+    // swivel the elbow toward the pole around the shoulder->target line
+    const n = at.clone().normalize(), e = B.getWorldPosition(new THREE.Vector3()).sub(pa), pp = pole.clone().sub(pa);
+    e.addScaledVector(n, -e.dot(n)); pp.addScaledVector(n, -pp.dot(n));
+    if (e.lengthSq() > 1e-6 && pp.lengthSq() > 1e-6) {
+      const sw = Math.atan2(new THREE.Vector3().crossVectors(e, pp).dot(n), e.dot(pp));
+      this.rotWorld(A, n, sw);
+    }
+  }
+  private restoreGunFit(eq: string) {
+    const g = this.weapons.get(eq); const f = g && this.gunFit.get(g);
+    if (f) f.local.decompose(g!.position, g!.quaternion, g!.scale);
+  }
+  /**
+   * Long guns: butt in the right shoulder pocket aimed at the crosshair point (or a
+   * low-ready carry when not aiming), right hand on the grip, left hand under the pump.
+   */
+  private holdLongGun(rig: CameraRig) {
+    const g = this.weapons.get('shotgun'), fit = g && this.gunFit.get(g);
+    const sh = this.anim.bone('upperarm_r'), chestB = this.anim.bone('spine_03'), shL = this.anim.bone('upperarm_l');
+    if (!g || !fit || !sh || !chestB || !shL) return;
+    const k = this.aimBlend, up = Player.UP;
+    const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)), right = new THREE.Vector3().crossVectors(fwd, up);
+    const S = sh.getWorldPosition(new THREE.Vector3()), chest = chestB.getWorldPosition(new THREE.Vector3());
+    const aimDir = rig.forward(new THREE.Vector3());
+    if (this.aimTarget) { const to = this.aimTarget.clone().sub(S); if (to.lengthSq() > 1 && to.normalize().dot(aimDir) > 0.6) aimDir.copy(to); }
+    const Sa = S.clone().addScaledVector(right, -0.05).addScaledVector(up, -0.035).addScaledVector(aimDir, 0.05);
+    // low ready: stock still in the shoulder pocket, muzzle pitched down ~40 degrees and a
+    // little across the body, so both hands stay on the gun
+    const Sl = S.clone().addScaledVector(right, -0.06).addScaledVector(up, -0.09).addScaledVector(fwd, 0.04);
+    const Dl = fwd.clone().multiplyScalar(0.76).addScaledVector(up, -0.62).addScaledVector(right, -0.16).normalize();
+    void chest;
+    const P = Sl.lerp(Sa, k), D = Dl.lerp(aimDir, k).normalize();
+    D.addScaledVector(up, 0.14 * this.gunKick).normalize(); P.addScaledVector(D, -0.06 * this.gunKick);
+    const Y = up.clone().addScaledVector(D, -up.dot(D)).normalize(), Z = new THREE.Vector3().crossVectors(D, Y);
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(D, Y, Z));
+    const butt = new THREE.Vector3(-0.4, 0.04, 0), forend = new THREE.Vector3(0.16, 0.058, 0);
+    const gunW = new THREE.Matrix4().compose(P.clone().sub(butt.applyQuaternion(q)), q, new THREE.Vector3(1, 1, 1));
+    // right hand: same grip as when the gun was fitted
+    const handR = new THREE.Matrix4().multiplyMatrices(gunW, fit.handRel);
+    const wR = new THREE.Vector3(), qR = new THREE.Quaternion(); handR.decompose(wR, qR, new THREE.Vector3());
+    this.ik('upperarm_r', 'lowerarm_r', 'hand_r', wR, S.clone().addScaledVector(up, -0.6).addScaledVector(right, 0.35).addScaledVector(fwd, -0.2));
+    this.setWorldQuat(this.anim.bone('hand_r')!, qR);
+    // left hand: palm up under the pump, fingers wrapping across
+    const pb = this.palmBasis('l');
+    if (pb) {
+      const fd = Z.clone().multiplyScalar(-0.85).addScaledVector(D, 0.45); // toward the gun's right side and forward
+      const nd = Y.clone(); fd.addScaledVector(nd, -fd.dot(nd)).normalize();
+      const Bc = new THREE.Matrix4().makeBasis(pb.f, pb.n, new THREE.Vector3().crossVectors(pb.f, pb.n));
+      const Bd = new THREE.Matrix4().makeBasis(fd, nd, new THREE.Vector3().crossVectors(fd, nd));
+      const R = new THREE.Quaternion().setFromRotationMatrix(Bd.multiply(Bc.transpose()));
+      const hL = this.anim.bone('hand_l')!, qL = R.multiply(hL.getWorldQuaternion(new THREE.Quaternion()));
+      const fe = forend.applyMatrix4(gunW).addScaledVector(Y, -0.03);
+      const wL = fe.addScaledVector(fd, -pb.palm);
+      const L0 = shL.getWorldPosition(new THREE.Vector3());
+      this.ik('upperarm_l', 'lowerarm_l', 'hand_l', wL, L0.addScaledVector(up, -0.6).addScaledVector(right, -0.3));
+      this.setWorldQuat(hL, qL);
+    }
+    // the gun hangs off the right hand bone: express the wanted world pose in its space
+    this.weaponHolder.updateWorldMatrix(true, false);
+    new THREE.Matrix4().copy(this.weaponHolder.matrixWorld).invert().multiply(gunW).decompose(g.position, g.quaternion, g.scale);
+  }
 
   /**
    * Fits a firearm to the right hand: the character is put in the aim pose once,
@@ -325,6 +453,7 @@ export class Player implements PlayerLike {
     const world = new THREE.Matrix4().compose(pos, q, new THREE.Vector3(1, 1, 1));
     const local = new THREE.Matrix4().copy(this.weaponHolder.matrixWorld).invert().multiply(world);
     local.decompose(group.position, group.quaternion, group.scale);
+    this.gunFit.set(group, { local: local.clone(), handRel: new THREE.Matrix4().copy(world).invert().multiply(hand.matrixWorld) });
     // remember where the arm points in this pose: aiming keeps that same relation to the camera
     const ad = this.armDir(new THREE.Vector3());
     if (ad) {
@@ -413,7 +542,8 @@ export class Player implements PlayerLike {
     const mag = Math.min(1, Math.hypot(mx, my));
     const aiming = this.aiming;
     const busy = ['reload', 'heal', 'interact', 'melee', 'hurt', 'throw'].includes(this.state);
-    let wantRun = allow && (input.running || mag > 0.97) && !aiming && !this.crouching && mag > 0.5;
+    // sprint only on request (sprint button / Shift): a fully pushed stick is a normal run
+    let wantRun = allow && input.running && !aiming && !this.crouching && mag > 0.35;
     if (this.staminaLock) wantRun = false;
     if (this.limp > 0) wantRun = false;
     this.running = wantRun && this.adrenalineT <= 0 ? this.stamina > 0 : wantRun;
@@ -425,8 +555,9 @@ export class Player implements PlayerLike {
       if (this.hp < 25) speed *= 0.82;
     }
     // stamina
-    if (this.running && speed > 3 && this.adrenalineT <= 0) { this.stamina -= dt * 17; this.staminaDelay = 1.1; if (this.stamina <= 0) { this.stamina = 0; this.staminaLock = true; audio.play('p_breath', { volume: 0.5 }); } }
-    else { this.staminaDelay -= dt; if (this.staminaDelay <= 0) this.stamina = Math.min(100, this.stamina + dt * 14); if (this.staminaLock && this.stamina > 35) this.staminaLock = false; }
+    // ~12 s of sprinting from full, refills in ~5 s after a short pause
+    if (this.running && speed > 3 && this.adrenalineT <= 0) { this.stamina -= dt * 8.5; this.staminaDelay = 0.8; if (this.stamina <= 0) { this.stamina = 0; this.staminaLock = true; input.runToggled = false; audio.play('p_breath', { volume: 0.5 }); } }
+    else { this.staminaDelay -= dt; if (this.staminaDelay <= 0) this.stamina = Math.min(100, this.stamina + dt * 20); if (this.staminaLock && this.stamina > 30) this.staminaLock = false; }
 
     const camYaw = rig.yaw;
     const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
@@ -511,6 +642,7 @@ export class Player implements PlayerLike {
     this.fireCd = w.fireDelay;
     this.state = 'shoot'; this.stateT = 0;
     this.anim.arms('Pistol_Shoot', { fade: 0.04, loop: false, speed: w.type === 'shotgun' ? 1.0 : 1.6 });
+    this.gunKick = 1;
     const muzzlePos = (this.muzzles[this.inv.equipped] || this.muzzle).getWorldPosition(new THREE.Vector3());
     if (w.type === 'shotgun') muzzlePos.addScaledVector(rig.forward(tmp), 0.35);
     this.onFire(w, muzzlePos);
@@ -733,6 +865,13 @@ export class Player implements PlayerLike {
     // where the camera aims (same offset as in the pose the guns were fitted in).
     this.aimBlend += ((aiming ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 10);
     if (this.aimBlend > 0.01) this.aimUpperBody(v, backwards, rig);
+    this.gunKick = Math.max(0, this.gunKick - dt * 5);
+    const handsBusy = ['reload', 'heal', 'interact', 'throw', 'melee'].includes(st);
+    const eq = this.inv.equipped;
+    const twoHand = eq === 'shotgun' && !handsBusy && st !== 'hurt';
+    if (twoHand) this.holdLongGun(rig); else this.restoreGunFit(eq);
+    // fingers close around whatever is held (the clips hold open hands)
+    if (eq && !['heal', 'interact', 'throw'].includes(st)) this.applyGrip(1, this.firearm && (aiming || twoHand) ? 1 : 0);
   }
 
   private armRef = { yaw: 0, elev: 0 };
@@ -759,7 +898,15 @@ export class Player implements PlayerLike {
       const d = THREE.MathUtils.clamp(wrap(mv - this.yaw), -1.1, 1.1) * k;
       this.rotWorld(pel, Player.UP, d);
     }
+    // aim at the point under the crosshair (shots are traced from the camera through it),
+    // so the gun converges on it instead of pointing parallel to an offset camera
     const cam = rig.forward(_vc);
+    const sh = this.anim.bone('upperarm_r');
+    if (this.aimTarget && sh) {
+      // only a target in front of her (a point behind or inside her would twist the body)
+      const to = _vb.copy(this.aimTarget).sub(sh.getWorldPosition(_va));
+      if (to.lengthSq() > 1 && to.normalize().dot(cam) > 0.6) cam.copy(to);
+    }
     const camYaw = Math.atan2(cam.x, cam.z), camElev = Math.atan2(cam.y, Math.hypot(cam.x, cam.z));
     let d = this.armDir(_vd); if (!d) return;
     const eYaw = THREE.MathUtils.clamp(wrap(Math.atan2(d.x, d.z) - camYaw - this.armRef.yaw), -1.2, 1.2);

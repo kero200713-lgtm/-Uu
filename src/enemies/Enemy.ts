@@ -65,6 +65,7 @@ export class Enemy {
     this.human = await createHuman({ ...this.t.human, lod: true, shadow: q ? q.level === 'high' : false });
     this.root.add(this.human.root);
     this.anim = new Animator(this.human.model);
+    this.anim.procedural('spine_02', 'spine_03', 'neck_01', 'Head'); // hit flinch offsets
     this.anim.onFinished((n) => this.onAnimDone(n));
     this.enterInitial();
     this.ready = true;
@@ -163,7 +164,7 @@ export class Enemy {
     // animation LOD
     const far = camD > ((this.w as any).q?.enemyAnimDist ?? 22);
     this.animAcc += dt;
-    if (!far || ++this.lodSkip % 3 === 0) { this.anim.update(this.animAcc); this.animAcc = 0; }
+    if (!far || ++this.lodSkip % 3 === 0) { this.anim.update(this.animAcc); this.animAcc = 0; this.applyKick(dt); }
     this.root.rotation.y = this.yaw;
     // visibility cull beyond draw distance
     this.root.visible = camD < 70;
@@ -379,7 +380,10 @@ export class Enemy {
       if (stagger >= this.t.staggerThreshold || knock > 0.4) { this.stun(stagger >= 1 ? 4.5 : 2.5); }
       return false;
     }
-    this.hp -= amount * (part === 'head' ? 2.2 : 1);
+    // headshots: triple damage (a pistol round to the head drops a Hollow) and the head snaps back;
+    // body hits jolt the torso without interrupting the attack unless they stagger
+    this.hp -= amount * (part === 'head' ? 3 : 1);
+    this.kick(dir, part, amount);
     if (this.hp <= 0) { this.die(); return true; }
     this.vocal(this.t.voice.hurt, 0.9);
     if (this.state === 'grab') { (p as any).releaseGrab?.(); }
@@ -387,6 +391,30 @@ export class Enemy {
     else if (stagger >= this.t.staggerThreshold || Math.random() < stagger * 0.5) this.set('stagger');
     else if (this.state !== 'chase' && this.state !== 'attack') this.set('chase');
     return false;
+  }
+
+  private kickT = 0; private kickAmt = 0; private kickHead = false; private kickAxis = new THREE.Vector3();
+  /** Records a hit impulse: the torso (body) or neck/head (head) is thrown back along the shot. */
+  private kick(dir: THREE.Vector3, part: 'head' | 'body', amount: number) {
+    this.kickAxis.set(dir.z, 0, -dir.x).normalize(); // horizontal axis perpendicular to the shot
+    this.kickHead = part === 'head';
+    this.kickAmt = Math.min(0.9, (part === 'head' ? 0.75 : 0.3) * (0.6 + amount / 40));
+    this.kickT = part === 'head' ? 0.42 : 0.3;
+  }
+  private applyKick(dt: number) {
+    if (this.kickT <= 0) return;
+    this.kickT = Math.max(0, this.kickT - dt);
+    const dur = this.kickHead ? 0.42 : 0.3, t = 1 - this.kickT / dur;
+    const env = Math.sin(Math.min(1, t * 2.2) * Math.PI * 0.5) * (1 - t) * (1 - t) * 1.6; // fast snap, slow return
+    const a = this.kickAmt * env;
+    const rot = (n: string, k: number) => {
+      const b = this.anim.bone(n); if (!b?.parent) return;
+      const pq = b.parent.getWorldQuaternion(new THREE.Quaternion());
+      const r = new THREE.Quaternion().setFromAxisAngle(this.kickAxis, a * k);
+      b.quaternion.premultiply(pq.clone().invert().multiply(r).multiply(pq));
+    };
+    if (this.kickHead) { rot('spine_03', 0.25); rot('neck_01', 0.45); rot('Head', 0.6); }
+    else { rot('spine_02', 0.45); rot('spine_03', 0.45); rot('Head', 0.15); }
   }
 
   stun(time: number) {

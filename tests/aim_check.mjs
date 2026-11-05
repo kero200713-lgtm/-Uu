@@ -15,6 +15,7 @@ await page.waitForFunction(() => window.__game?.state === 'menu', null, { timeou
 await page.evaluate(() => window.__game.newGame());
 await page.waitForFunction(() => window.__game.state === 'play', null, { timeout: 180000 });
 await page.evaluate(() => { const g = window.__game; g.hud.show(false); g.touch.show(false); g.debugGive('pistol'); g.debugGive('shotgun'); g.debugTeleport(12.5, 30, 180, 0); g.engine.grade.exposure = 2.6; });
+await page.evaluate(() => { const g = window.__game; window.__tgt = () => { const p = g.player, V = p.pos.constructor; p.aimTarget = p.pos.clone().add(new V(0, 1.55, 0)).addScaledVector(g.rig.forward(new V()), 20); }; });
 await page.waitForTimeout(1200);
 const results = [];
 const check = (n, ok, info = '') => { results.push(`${ok ? 'PASS' : 'FAIL'} ${n} ${info}`); console.log(results.at(-1)); };
@@ -25,7 +26,7 @@ const step = (n, move) => page.evaluate(([n, move]) => {
   const out = [];
   for (let i = 0; i < n; i++) {
     if (move) { p.vel.set(Math.cos(p.yaw) * move, 0, -Math.sin(p.yaw) * move); }
-    p.update(1 / 20, g.rig, false);
+    window.__tgt(); p.update(1 / 20, g.rig, false);
     p.root.updateMatrixWorld(true);
     const V = p.pos.constructor, Q = g.player.root.quaternion.constructor;
     const chest = p.anim.bone('spine_03').getWorldQuaternion(new Q());
@@ -41,13 +42,14 @@ for (const w of ['pistol', 'shotgun']) {
   await step(10, 0);
   const barrelErr = (move) => page.evaluate(async ([w, move]) => {
     const g = window.__game, p = g.player, V = p.pos.constructor;
-    for (let i = 0; i < 8; i++) { if (move) p.vel.set(Math.cos(p.yaw) * move, 0, -Math.sin(p.yaw) * move); p.update(1 / 20, g.rig, false); }
+    for (let i = 0; i < 8; i++) { if (move) p.vel.set(Math.cos(p.yaw) * move, 0, -Math.sin(p.yaw) * move); window.__tgt(); p.update(1 / 20, g.rig, false); }
     p.root.updateMatrixWorld(true);
     const grp = p.weapons.get(w), mesh = grp.children[0];
     const axis = w === 'pistol' ? new V(0, 0, 1) : new V(1, 0, 0);
     const Q = p.root.quaternion.constructor;
     const dir = axis.applyQuaternion(mesh.getWorldQuaternion(new Q())).normalize();
-    const cam = g.rig.forward(new V());
+    const mz = mesh.localToWorld(w === 'pistol' ? new V(0, 0.058, 0.12) : new V(0.52, 0.12, 0));
+    const cam = p.aimTarget.clone().sub(mz).normalize(); // barrel must point at the crosshair point
     return +(Math.acos(Math.min(1, dir.dot(cam))) * 57.3).toFixed(1);
   }, [w, move]);
   const e0 = await barrelErr(0), e1 = await barrelErr(1.4);
@@ -65,11 +67,13 @@ for (const w of ['pistol', 'shotgun']) {
   await page.evaluate(() => { window.__game.rig.cinematic = null; });
 }
 // strafe right while aiming for 4 s of game time: chest yaw must not run away
+await step(12, 1.4); // settle: the body first turns to the camera
 const yaws = await step(80, 1.4);
 const unwrap = []; let prev = yaws[0], acc = 0;
 for (const y of yaws) { let d = y - prev; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; acc += d; prev = y; unwrap.push(acc); }
 const span = Math.max(...unwrap) - Math.min(...unwrap);
 check('no torso spin while strafing aimed', span < 1.2, `chest yaw span ${span.toFixed(2)} rad over ${yaws.length} frames`);
+if (span >= 1.2) console.log(yaws.map((y) => (y * 57.3).toFixed(0)).join(' '));
 await page.evaluate(() => { window.__game.debugCloseUp(300, -0.3, 2.2); });
 await step(1, 1.4);
 await page.screenshot({ path: `${OUT}/aim-strafe.png` });

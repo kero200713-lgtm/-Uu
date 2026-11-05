@@ -32,8 +32,9 @@ export class TouchControls {
       <div class="tb tb-interact" data-a="interact">${icon('hand', 30)}<span class="lbl"></span></div>
       <div class="tb tb-reload" data-a="reload">${icon('reload', 24)}</div>
       <div class="tb tb-crouch" data-a="crouch">${icon('crouch', 26)}</div>
+      <div class="tb tb-run" data-a="run">${icon('run', 26)}</div>
       <div class="tb tb-heal" data-a="heal">${icon('medkit', 24)}</div>
-      <div class="tb small tb-switch" data-a="switch"><span class="wicon"></span></div>
+      <div class="tb tb-switch" data-a="switch"><span class="wicon"></span><span class="wname"></span></div>
       <div class="tb small tb-flash" data-a="flashlight">${icon('flash', 22)}</div>
       <div class="tb small tb-inv" data-a="inventory">${icon('bag', 22)}</div>
       <div class="tb small tb-pause" data-a="pause">${icon('pause', 22)}</div>`;
@@ -58,6 +59,7 @@ export class TouchControls {
           bus.emit('touch:fire');
           input.press('fire');
         } else if (a === 'crouch') { input.press('crouch'); }
+        else if (a === 'run') { input.runToggled = !input.runToggled; input.press('run'); input.release('run'); }
         else input.press(a);
         if (settings.data.vibration) vibrate(8);
       });
@@ -121,7 +123,7 @@ export class TouchControls {
     const m = Math.hypot(mx, my);
     const k = m < 0.12 ? 0 : (m - 0.12) / 0.88 / (m || 1);
     input.move.x = mx * k; input.move.y = my * k;
-    this.joyRing.classList.toggle('run', m > 0.97);
+    this.joyRing.classList.toggle('run', input.runToggled && m > 0.3);
   }
 
   private lookStart(e: PointerEvent) {
@@ -149,12 +151,13 @@ export class TouchControls {
       this.joyKnob.style.transform = 'translate(0px,0px)';
       this.joyBase.classList.remove('active');
       this.joyRing.classList.remove('run');
+      input.runToggled = false; // letting go of the stick ends a sprint
     }
     this.lookIds.delete(e.pointerId);
   }
 
   /** Context: which buttons are relevant right now. */
-  update(ctx: { firearm: boolean; aiming: boolean; interact: string | null; canReload: boolean; crouching: boolean; healAvail: boolean; weaponIcon: string; flashOn: boolean; grabbed: boolean }) {
+  update(ctx: { firearm: boolean; aiming: boolean; interact: string | null; canReload: boolean; crouching: boolean; healAvail: boolean; weaponIcon: string; weaponName?: string; weaponCount?: number; running?: boolean; flashOn: boolean; grabbed: boolean }) {
     if (!this.visible) return;
     const set = (k: string, v: boolean) => this.btns[k]?.el.classList.toggle('hidden', !v);
     set('aim', ctx.firearm && !ctx.grabbed);
@@ -162,12 +165,17 @@ export class TouchControls {
     set('interact', !!ctx.interact || ctx.grabbed);
     set('heal', ctx.healAvail && !ctx.grabbed);
     set('crouch', !ctx.grabbed);
+    set('run', !ctx.grabbed && !ctx.aiming);
+    set('switch', (ctx.weaponCount ?? 0) > 1 && !ctx.grabbed);
+    this.btns.run?.el.classList.toggle('on', !!ctx.running);
     this.btns.aim?.el.classList.toggle('on', ctx.aiming);
     this.btns.crouch?.el.classList.toggle('on', ctx.crouching);
     this.btns.flashlight?.el.classList.toggle('on', ctx.flashOn);
     const lbl = this.btns.interact?.el.querySelector('.lbl') as HTMLElement;
     if (lbl) lbl.textContent = ctx.grabbed ? '' : ctx.interact || '';
     const w = this.btns.switch?.el.querySelector('.wicon') as HTMLElement;
-    if (w && w.dataset.i !== ctx.weaponIcon) { w.dataset.i = ctx.weaponIcon; w.innerHTML = icon(ctx.weaponIcon, 24); }
+    if (w && w.dataset.i !== ctx.weaponIcon) { w.dataset.i = ctx.weaponIcon; w.innerHTML = icon(ctx.weaponIcon, 26); }
+    const wn = this.btns.switch?.el.querySelector('.wname') as HTMLElement;
+    if (wn && wn.textContent !== (ctx.weaponName || '')) wn.textContent = ctx.weaponName || '';
   }
 }

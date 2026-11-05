@@ -1,6 +1,17 @@
 import * as THREE from 'three';
 import { assets } from '../core/Assets';
 
+/*
+ * Global guard against "fireflies": a light a few centimetres from a glossy surface
+ * gives a specular term far above the half-float range of the HDR target (Inf/NaN),
+ * which the post pass then splits into red/green/blue dots (seen on iPad). Direct
+ * specular is capped and every lit material's output is sanitised before it is written.
+ */
+if (!THREE.ShaderChunk.lights_fragment_end.includes('FIREFLY')) {
+  THREE.ShaderChunk.lights_fragment_end += '\n// FIREFLY guard\nreflectedLight.directSpecular = min(reflectedLight.directSpecular, vec3(3.0));\n';
+  THREE.ShaderChunk.opaque_fragment = 'if (!(outgoingLight.r + outgoingLight.g + outgoingLight.b < 1.0e4)) outgoingLight = vec3(0.0);\noutgoingLight = clamp(outgoingLight, 0.0, 48.0);\n' + THREE.ShaderChunk.opaque_fragment;
+}
+
 /** Uniforms shared by every patched material (one upload per frame). */
 export const shared = {
   uTime: { value: 0 },
