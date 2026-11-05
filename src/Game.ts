@@ -83,7 +83,7 @@ export class Game implements World {
     this.touch = new TouchControls(uiRoot);
     this.screens = new Screens(uiRoot);
     input.attachKeyboardMouse(canvas);
-    (window as any).__game = this; (window as any).__audio = audio;
+    (window as any).__game = this; (window as any).__audio = audio; (window as any).__assets = assets; (window as any).__THREE = THREE;
   }
 
   // -------------------------------------------------------------- boot ---
@@ -287,6 +287,17 @@ export class Game implements World {
     if (env.tint) g.gain.setRGB(env.tint[0], env.tint[1], env.tint[2]); else g.gain.setRGB(0.98, 1, 1.02);
     const q = this.engine.q;
     this.atmo.build({ dust: Math.round(q.dust * (env.dust ?? 1)), rain: env.rain ? Math.round(q.rain * env.rain) : 0, wisps: env.outdoor ? (q.level === 'low' ? 6 : 14) : 0, outdoor: env.outdoor });
+    {
+      // rain must not fall inside buildings: everything with a roof over it
+      const g = lvl.grid, cov = new Uint8Array(g.w * g.h);
+      for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) {
+        const i = g.info(x, y), ch = g.ch(x, y);
+        let roofed = !!i.indoor || (i.kind === 'wall' && !i.thin && ch !== 'T' && ch !== ' ');
+        if (i.kind === 'door') roofed = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => !!g.info(x + dx, y + dy).indoor);
+        cov[y * g.w + x] = roofed ? 255 : 0;
+      }
+      this.atmo.setCover(cov, g.w, g.h, g.tile, lvl.def.wallHeight ?? 3.4);
+    }
     this.rig.grid = lvl.grid;
     this.rig.ceiling = def.ceiling ?? 3;
     // player placement

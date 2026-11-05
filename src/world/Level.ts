@@ -22,6 +22,17 @@ export interface Interactable {
 const INDOOR_WALL: Record<string, string> = { w: 'wallpaper', t: 'plaster', k: 'plaster', c: 'concrete', m: 'metal_painted', q: 'rock' };
 const CEILING: Record<string, string> = { w: 'plaster', t: 'ceiling', k: 'plaster', c: 'concrete', m: 'metal_painted', q: 'rock' };
 
+/** Furniture islands for room dressing: [model, x, z (metres), rotation (deg, front +Z), scale]. */
+type Piece = [string, number, number, number, number, number?];
+const LOUNGE: Piece[] = [['Carpet_1', 0, 0, 90, 1.8], ['Couch_Medium1', 0, -1.0, 0, 1], ['Table_RoundSmall', 0, 0.35, 0, 1], ['Light_Floor1', 1.45, -1.0, 0, 1], ['Houseplant_1', -1.45, -0.95, 0, 1]];
+const DINING: Piece[] = [['Table_RoundLarge', 0, 0, 0, 1], ['Chair_1', -0.5, 0.62, 180, 1], ['Chair_2', 0.5, 0.62, 180, 1], ['Chair_1', -0.5, -0.62, 0, 1], ['Chair_2', 0.5, -0.62, 0, 1]];
+const READING: Piece[] = [['Carpet_1', 0, 0, 0, 1.5], ['Couch_Small1', 0, -0.6, 0, 1], ['NightStand_1', 1.0, -0.6, 0, 1], ['Light_Floor1', -1.05, -0.7, 0, 1]];
+const AISLE: Piece[] = [['Shelf_Large', 0, -0.22, 180, 1], ['Shelf_Large', 0, 0.22, 0, 1]];
+const DESK: Piece[] = [['Table_RoundLarge', 0, 0, 0, 1], ['Chair_1', 0, 0.62, 180, 1], ['Light_Desk', 0.6, 0, 0, 1, 0.56], ['Drawer_1', 0, -0.95, 0, 1]];
+const GROUPS: Record<string, Piece[][]> = {
+  living: [LOUNGE, DINING, READING], bedroom: [READING], kitchen: [DINING], store: [AISLE, AISLE, DINING], office: [DESK, DESK, LOUNGE],
+};
+
 class GeoBuilder {
   pos: number[] = []; nor: number[] = []; uv: number[] = []; idx: number[] = [];
   quad(a: number[], b: number[], c: number[], d: number[], n: number[], uva: number[], uvb: number[], uvc: number[], uvd: number[]) {
@@ -134,7 +145,9 @@ export class Level {
       const solid = p.solid ?? (pg.size.y * s > 0.6 && Math.max(pg.size.x, pg.size.z) * s > 0.5);
       propPlacements.push({ pack: p.pack, name: p.name, m, solid });
       if (solid) {
-        const bb = new THREE.Box3(pg.min.clone(), pg.max.clone()).applyMatrix4(m);
+        // collide with what a person would bump into (the part below ~1.1 m), not the
+        // whole bounding box: lamp arms, tree crowns, sign boards are no invisible walls
+        const bb = this.footprint(pg, s).applyMatrix4(m);
         const pad = 0.05;
         g.addBox(bb.min.x + pad, bb.min.z + pad, bb.max.x - pad, bb.max.z - pad, p.sight ?? (pg.size.y * s < 1.3), true);
       }
@@ -145,6 +158,7 @@ export class Level {
       placeProp({ type: 'prop', pack: I.model!.pack, name: I.model!.name, at: I.at, rot: I.model!.rot, scale: I.model!.scale, h: I.model!.h, solid: I.model!.solid });
     }
     for (const e of ents) if (e.type === 'scatter') this.scatter(e as ScatterDef, q, propPlacements);
+    if (def.dress) this.dressRooms(ents, placeProp);
 
     const env = def.env;
     this.baker = new Baker(g, bakeLights, new THREE.Color(env.ambient).multiplyScalar(6), env.outdoor ? 1.6 : 1);
@@ -162,10 +176,16 @@ export class Level {
     for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) {
       const info = g.info(x, y);
       const x0 = x * T, z0 = y * T, x1 = x0 + T, z1 = z0 + T;
-      if (info.kind === 'floor' || info.kind === 'door') {
+      if (info.kind === 'floor' || info.kind === 'door' || info.thin) {
         let fm = info.floor;
         let indoor = info.indoor;
         if (info.kind === 'door') { const n = this.doorFloor(x, y); fm = n.floor; indoor = n.indoor; }
+        else if (info.thin) {
+          // ground under fences / rubble: the neighbouring floor (outdoor first for fences)
+          const ns = [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([dx, dy]) => g.info(x + dx, y + dy)).filter((i) => i.kind === 'floor');
+          const pickN = (g.ch(x, y) === 'F' ? ns.find((i) => !i.indoor) : null) || ns.find((i) => i.indoor) || ns[0];
+          fm = pickN?.floor || 'ground_forest'; indoor = !!pickN?.indoor;
+        }
         const fb = B(fm || 'concrete', 'floor');
         const hs = T / 2;
         for (let sy = 0; sy < 2; sy++) for (let sx = 0; sx < 2; sx++) {
@@ -190,6 +210,7 @@ export class Level {
           [x + 1, y, [1, 0, 0], [[x1, z1], [x1, z0]]],
         ];
         let topNeeded = false;
+        let roomN: [number, number] | null = null;
         for (const [nx, ny, n, [[ax, az], [bx, bz]]] of nbs) {
           const ni = g.info(nx, ny);
           const nch = g.ch(nx, ny);
@@ -200,7 +221,7 @@ export class Level {
           if (nIndoor && (ch === '#' || ch === 'B' || ch === 'C')) mat = INDOOR_WALL[this.dominantIndoor(nx, ny)] || 'plaster';
           if (ch === 'R') mat = 'rock';
           const h = nIndoor ? ceilH : H;
-          if (!nIndoor) topNeeded = true;
+          if (!nIndoor) topNeeded = true; else roomN = [nx, ny];
           const wb = B(mat, 'wall');
           this.wallQuad(wb, ax, az, bx, bz, 0, Math.min(1.2, h), n, ch === 'R');
           this.wallQuad(wb, ax, az, bx, bz, Math.min(1.2, h), h, n, ch === 'R');
@@ -208,6 +229,13 @@ export class Level {
         if (topNeeded) {
           const H2 = info.height ?? wallH;
           B('roof', 'ceil').quad([x0, H2, z0], [x0, H2, z1], [x1, H2, z1], [x1, H2, z0], [0, 1, 0], [0, 0], [0, 1], [1, 1], [1, 0]);
+        }
+        // walls facing a room: close the ceiling over the wall itself and the roof above
+        // it (otherwise there is a 2 m slot to the sky along every interior wall)
+        if (roomN && ch !== 'R') {
+          const cm = CEILING[this.dominantIndoor(roomN[0], roomN[1])] || 'plaster';
+          B(cm, 'ceil').quad([x0, ceilH, z0], [x1, ceilH, z0], [x1, ceilH, z1], [x0, ceilH, z1], [0, -1, 0], [x0 * uvs, z0 * uvs], [x1 * uvs, z0 * uvs], [x1 * uvs, z1 * uvs], [x0 * uvs, z1 * uvs]);
+          if (!topNeeded) B('roof', 'ceil').quad([x0, wallH, z0], [x0, wallH, z1], [x1, wallH, z1], [x1, wallH, z0], [0, 1, 0], [x0 * uvs, z0 * uvs], [x0 * uvs, z1 * uvs], [x1 * uvs, z1 * uvs], [x1 * uvs, z0 * uvs]);
         }
       } else if (info.kind === 'water') {
         // handled below
@@ -274,6 +302,143 @@ export class Level {
       p.setXYZ(i, x + n.getX(i) * k, y, z + n.getZ(i) * k);
     }
     geo.computeVertexNormals();
+  }
+
+  /**
+   * Furnishes indoor rooms so houses don't read as empty boxes with the same shelf:
+   * every room (indoor floor cells joined without doors) gets a theme from its floor
+   * and size, furniture with its back to the walls (front +Z faces the room), curtains
+   * at windows, and a rug/table/chairs group in larger rooms. Door approaches, story
+   * entities and hand-placed props keep a clear radius; corridors stay empty.
+   */
+  private dressRooms(ents: EntityDef[], placeProp: (p: PropDef) => void) {
+    const g = this.grid, T = this.T, r = this.rng(5150);
+    const THEMES: Record<string, { wall: string[]; low: string[]; center?: string[]; curtains?: boolean }> = {
+      living: { wall: ['Couch_Medium1', 'Bookshelf', 'Houseplant_1', 'Drawer_2', 'Fireplace', 'Light_Floor1', 'Shelf_Small1', 'Couch_Small1', 'Drawer_1'], low: ['Drawer_1', 'Couch_Small1', 'Houseplant_1', 'Drawer_2'], center: ['Carpet_1', 'Table_RoundLarge', 'Chair_1', 'Chair_2'], curtains: true },
+      bedroom: { wall: ['Bed_Single', 'NightStand_1', 'Drawer_3', 'Shelf_Small1', 'Houseplant_1', 'Drawer_1', 'Light_Floor1'], low: ['NightStand_1', 'Drawer_1', 'Houseplant_1'], center: ['Carpet_1'], curtains: true },
+      kitchen: { wall: ['Kitchen_Fridge', 'Kitchen_Oven', 'Kitchen_Sink', 'Kitchen_Cabinet1', 'Kitchen_2Drawers', 'Trashcan_Small1', 'Shelf_1'], low: ['Kitchen_2Drawers', 'Kitchen_Sink', 'Trashcan_Small1'], center: ['Table_RoundSmall', 'Chair_1', 'Chair_2'], curtains: true },
+      store: { wall: ['Shelf_Large', 'Shelf_1', 'Drawer_2', 'Trashcan_Large', 'Kitchen_2Drawers', 'Shelf_Small1'], low: ['Drawer_2', 'Kitchen_2Drawers', 'Trashcan_Large'], center: ['Table_RoundLarge'] },
+      office: { wall: ['Drawer_1', 'Bookshelf', 'Drawer_3', 'Shelf_Small1', 'Kitchen_2Drawers', 'Houseplant_1', 'Trashcan_Small1'], low: ['Drawer_1', 'Drawer_3', 'Houseplant_1'], center: ['Table_RoundLarge', 'Chair_1', 'Chair_2'] },
+      bath: { wall: ['Bathroom_Bathtub', 'Bathroom_Toilet', 'Bathroom_Sink', 'Bathroom_WashingMachine', 'Trashcan_Small1'], low: ['Bathroom_Sink', 'Trashcan_Small1'] },
+    };
+    // points to keep clear (cell units): story entities and hand-placed props
+    const keep: [number, number, number][] = [];
+    for (const e of ents) {
+      const at = (e as any).at as [number, number] | undefined;
+      if (!at || e.type === 'light' || e.type === 'spawn') continue;
+      keep.push([at[0], at[1], e.type === 'prop' ? 0.6 : 1.0]);
+    }
+    const clear = (cx: number, cy: number, rad = 0) => keep.every(([kx, ky, kr]) => Math.hypot(kx - cx, ky - cy) > kr + rad);
+    const isRoom = (x: number, y: number) => { const i = g.info(x, y); return i.kind === 'floor' && !!i.indoor; };
+    const nearDoor = (x: number, y: number) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (g.info(x + dx, y + dy).kind === 'door') return true; return false; };
+    const seen = new Uint8Array(g.w * g.h);
+    const rooms: { cells: [number, number][]; floor: string }[] = [];
+    for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) {
+      if (seen[g.idx(x, y)] || !isRoom(x, y)) continue;
+      const cells: [number, number][] = [], st: [number, number][] = [[x, y]]; seen[g.idx(x, y)] = 1;
+      while (st.length) {
+        const [cx, cy] = st.pop()!; cells.push([cx, cy]);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (g.inside(nx, ny) && !seen[g.idx(nx, ny)] && isRoom(nx, ny) && g.info(nx, ny).floor === g.info(x, y).floor) { seen[g.idx(nx, ny)] = 1; st.push([nx, ny]); }
+        }
+      }
+      rooms.push({ cells, floor: g.info(x, y).floor! });
+    }
+    const resCount = new Map<string, number>();
+    rooms.sort((a, b) => b.cells.length - a.cells.length);
+    for (const room of rooms) {
+      if (room.cells.length < 4) continue;
+      const inRoom = new Set(room.cells.map(([x, y]) => x + ',' + y));
+      let theme: string;
+      if (room.floor === 'wood_floor') { const n = resCount.get('w') || 0; resCount.set('w', n + 1); theme = room.cells.length >= 36 ? 'living' : ['living', 'bedroom', 'kitchen', 'bedroom'][n % 4]; }
+      else if (room.floor === 'tiles_check') theme = 'store';
+      else if (room.floor === 'tiles_white') theme = room.cells.length <= 6 ? 'bath' : 'kitchen';
+      else if (room.floor === 'concrete') theme = 'office';
+      else continue;
+      const th = THEMES[theme];
+      // wall slots
+      type Slot = { x: number; y: number; dx: number; dy: number; win: boolean };
+      const slots: Slot[] = [];
+      for (const [x, y] of room.cells) {
+        if (nearDoor(x, y)) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = g.info(x + dx, y + dy), ch = g.ch(x + dx, y + dy);
+          if (n.kind !== 'wall' || n.thin) continue;
+          if (!inRoom.has((x - dx) + ',' + (y - dy))) continue; // room must be 2+ cells deep here (no corridors)
+          slots.push({ x, y, dx, dy, win: ch === 'v' });
+        }
+      }
+      for (let i = slots.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [slots[i], slots[j]] = [slots[j], slots[i]]; }
+      const used = new Set<string>();
+      const max = Math.max(2, Math.round(room.cells.length * (theme === 'store' ? 0.45 : 0.32)));
+      let placed = 0, wi = Math.floor(r() * th.wall.length);
+      for (const sl of slots) {
+        if (placed >= max) break;
+        const key = sl.x + ',' + sl.y + ',' + sl.dx + ',' + sl.dy;
+        if (used.has(sl.x + ',' + sl.y)) continue;
+        // curtains at windows in homes, a low piece under the sill
+        if (sl.win && th.curtains) {
+          const off = 0.5 - 0.06; const ax = Math.abs(sl.dy), ay = Math.abs(sl.dx);
+          for (const sgn of [-1, 1]) placeProp({ type: 'prop', pack: 'interior', name: 'Curtains_Single', at: [sl.x + 0.5 + sl.dx * off + ax * sgn * 0.36, sl.y + 0.5 + sl.dy * off + ay * sgn * 0.36], rot: (Math.atan2(-sl.dx, -sl.dy) * 180) / Math.PI, solid: false } as PropDef);
+        }
+        const list = sl.win ? th.low : th.wall;
+        const name = list[(wi++) % list.length];
+        const pg = assets.prop('interior', name);
+        if (!pg) continue;
+        const depth = pg.size.z, width = pg.size.x;
+        const cx = sl.x + 0.5 + sl.dx * (0.5 - (depth / 2 + 0.05) / T), cy = sl.y + 0.5 + sl.dy * (0.5 - (depth / 2 + 0.05) / T);
+        if (!clear(cx, cy, width / T / 2)) continue;
+        placeProp({ type: 'prop', pack: 'interior', name, at: [cx, cy], rot: (Math.atan2(-sl.dx, -sl.dy) * 180) / Math.PI + (r() - 0.5) * 4, solid: pg.size.y > 0.5 } as PropDef);
+        keep.push([cx, cy, Math.max(0.45, width / T / 2)]);
+        used.add(sl.x + ',' + sl.y); used.add(key); placed++;
+        // wide pieces also take the neighbouring cell along the wall
+        if (width > 1.6) { used.add((sl.x + Math.abs(sl.dy)) + ',' + (sl.y + Math.abs(sl.dx))); used.add((sl.x - Math.abs(sl.dy)) + ',' + (sl.y - Math.abs(sl.dx))); }
+      }
+      // furniture islands inside larger rooms, spaced apart, never next to walls/doors
+      const groups = GROUPS[theme];
+      if (groups && room.cells.length >= 9) {
+        const xs = room.cells.map((c) => c[0]), ys = room.cells.map((c) => c[1]);
+        const mx = (Math.max(...xs) + Math.min(...xs) + 1) / 2, my = (Math.max(...ys) + Math.min(...ys) + 1) / 2;
+        const inner = room.cells.filter(([x, y]) => [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]].every(([dx, dy]) => inRoom.has((x + dx) + ',' + (y + dy))) && !nearDoor(x, y));
+        inner.sort((a, b) => Math.hypot(a[0] + 0.5 - mx, a[1] + 0.5 - my) - Math.hypot(b[0] + 0.5 - mx, b[1] + 0.5 - my));
+        const want = Math.max(1, Math.floor(room.cells.length / 16));
+        const spots: [number, number][] = [];
+        for (const c of inner) {
+          if (spots.length >= want) break;
+          if (spots.some(([sx, sy]) => Math.max(Math.abs(sx - c[0]), Math.abs(sy - c[1])) < 3)) continue;
+          if (!clear(c[0] + 0.5, c[1] + 0.5, 0.75)) continue;
+          spots.push(c);
+        }
+        spots.forEach(([gx, gy], gi) => {
+          const tpl = groups[(gi + Math.floor(r() * groups.length)) % groups.length];
+          const turn = r() < 0.5 ? 0 : Math.PI / 2, c = Math.cos(turn), sn = Math.sin(turn);
+          for (const [nm, ox, oz, rot, sc, hh] of tpl) {
+            const pg = assets.prop('interior', nm); if (!pg) continue;
+            // rotate the template offset (metres) by the group turn, convert to cell units
+            const wx = (ox * c + oz * sn) / T, wz = (-ox * sn + oz * c) / T;
+            placeProp({ type: 'prop', pack: 'interior', name: nm, at: [gx + 0.5 + wx, gy + 0.5 + wz], rot: rot + (turn * 180) / Math.PI, scale: sc, h: hh, solid: nm !== 'Carpet_1' && !nm.startsWith('Chair') && pg.size.y > 0.5 } as PropDef);
+          }
+          keep.push([gx + 0.5, gy + 0.5, 1.3]);
+        });
+      }
+    }
+  }
+
+  private footCache = new Map<string, THREE.Box3>();
+  /** Local-space box of a prop's geometry below 1.1 m (world) — its collision footprint. */
+  private footprint(pg: { geometry: THREE.BufferGeometry; min: THREE.Vector3; max: THREE.Vector3 }, s: number) {
+    const key = pg.geometry.uuid + ':' + s;
+    let b = this.footCache.get(key);
+    if (!b) {
+      const P = pg.geometry.attributes.position as THREE.BufferAttribute, top = pg.min.y + 1.1 / s;
+      b = new THREE.Box3();
+      for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y <= top) b.expandByPoint(new THREE.Vector3(P.getX(i), y, P.getZ(i))); }
+      if (b.isEmpty()) b.set(pg.min.clone(), pg.max.clone());
+      b.max.y = pg.max.y;
+      this.footCache.set(key, b);
+    }
+    return b.clone();
   }
 
   private doorFloor(x: number, y: number) {
@@ -392,7 +557,15 @@ export class Level {
       // big trees (~9-12 m): sparse placement still reads as dense forest; the
       // outer belt (d >= 5) only has to break the horizon inside the fog
       const chance = d <= 1 ? 0.55 : d === 2 ? 0.38 : d <= 4 ? 0.2 : 0.11;
-      if (r() > chance) continue;
+      if (r() > chance) {
+        // a blocked tree cell next to the path must never look empty (no invisible walls):
+        // fill it with undergrowth when no tree was rolled
+        if (ch === 'T' && d <= 1) for (let k = 0; k < 2; k++) {
+          const nm = ['Bush_1', 'Bush_2', 'Bush_1', 'Rock_Moss_1', 'Rock_Moss_2'][Math.floor(r() * 5)], sc = 1.1 + r() * 0.6;
+          out.push({ pack: 'nature', name: nm, m: new THREE.Matrix4().compose(this.w(x + 0.2 + r() * 0.6, y + 0.2 + r() * 0.6, 0), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * 6.28), new THREE.Vector3(sc, sc * (0.8 + r() * 0.4), sc)), solid: false });
+        }
+        continue;
+      }
       const pool = r() < 0.7 ? evergreen : dead;
       const name = pool[Math.floor(r() * pool.length)];
       // slender spruce-like silhouettes keep branches out of the walkable lane
@@ -428,14 +601,27 @@ export class Level {
         const x0 = x * T, z0 = y * T, x1 = x0 + T, z1 = z0 + T;
         water.quad([x0, -0.12, z0], [x0, -0.12, z1], [x1, -0.12, z1], [x1, -0.12, z0], [0, 1, 0], [x0 / 4, z0 / 4], [x0 / 4, z1 / 4], [x1 / 4, z1 / 4], [x1 / 4, z0 / 4]);
       } else if (ch === 'F') {
-        const horiz = ['F', '#', 'B', 'C', 'G', 'W'].includes(g.ch(x - 1, y)) || ['F', '#', 'B', 'C', 'G', 'W'].includes(g.ch(x + 1, y));
-        const ry = horiz ? 0 : Math.PI / 2;
-        const ax = horiz ? [1, 0] : [0, 1];
-        fence.push(box(0.08, 1.3, 0.08, cx - ax[0] * T / 2, 0.65, cz - ax[1] * T / 2));
-        fence.push(box(T, 0.06, 0.05, cx, 1.18, cz, ry));
-        fence.push(box(T, 0.05, 0.05, cx, 0.35, cz, ry));
-        for (let i = 0; i < 9; i++) { const o = -T / 2 + (i + 0.5) * (T / 9); fence.push(box(0.025, 0.85, 0.025, cx + ax[0] * o, 0.77, cz + ax[1] * o, ry)); }
-        g.addBox(cx - (horiz ? T / 2 : 0.12), cz - (horiz ? 0.12 : T / 2), cx + (horiz ? T / 2 : 0.12), cz + (horiz ? 0.12 : T / 2), true, false);
+        // fence runs from the cell centre toward every neighbour it joins (fence, gate,
+        // wall), so corners and T-junctions close; collision is the fence line only
+        const joins = (c: string) => ['F', '#', 'B', 'C', 'G', 'W', 'P', 'M', 'N', 'S', 'D', 'R'].includes(c);
+        const dirs: [number, number][] = [];
+        if (joins(g.ch(x - 1, y))) dirs.push([-1, 0]);
+        if (joins(g.ch(x + 1, y))) dirs.push([1, 0]);
+        if (joins(g.ch(x, y - 1))) dirs.push([0, -1]);
+        if (joins(g.ch(x, y + 1))) dirs.push([0, 1]);
+        if (!dirs.length) dirs.push([-1, 0], [1, 0]);
+        fence.push(box(0.08, 1.3, 0.08, cx, 0.65, cz)); // centre post
+        for (const [dx, dz] of dirs) {
+          const ry = dx !== 0 ? 0 : Math.PI / 2, h = T / 2;
+          const mx = cx + dx * h / 2, mz = cz + dz * h / 2;
+          fence.push(box(h, 0.06, 0.05, mx, 1.18, mz, ry));
+          fence.push(box(h, 0.05, 0.05, mx, 0.35, mz, ry));
+          for (let i = 0; i < 5; i++) { const o = (i + 0.5) * (h / 5); fence.push(box(0.025, 0.85, 0.025, cx + dx * o, 0.77, cz + dz * o, ry)); }
+          fence.push(box(0.08, 1.3, 0.08, cx + dx * h, 0.65, cz + dz * h)); // post on the cell edge
+          const x0 = Math.min(cx, cx + dx * h) - (dx === 0 ? 0.12 : 0), x1 = Math.max(cx, cx + dx * h) + (dx === 0 ? 0.12 : 0);
+          const z0 = Math.min(cz, cz + dz * h) - (dz === 0 ? 0.12 : 0), z1 = Math.max(cz, cz + dz * h) + (dz === 0 ? 0.12 : 0);
+          g.addBox(x0 - 0.06, z0 - 0.06, x1 + 0.06, z1 + 0.06, true, false);
+        }
       } else if (ch === 'v') {
         const horiz = !(g.info(x, y - 1).kind === 'wall' && g.info(x, y + 1).kind === 'wall');
         const n1 = horiz ? g.info(x, y - 1) : g.info(x - 1, y), n2 = horiz ? g.info(x, y + 1) : g.info(x + 1, y);
@@ -452,8 +638,10 @@ export class Level {
         const ry = horiz ? 0 : Math.PI / 2;
         for (let i = 0; i < 3; i++) boards.push(box(T * 0.95, 0.16, 0.035, cx, 1.15 + i * 0.36 + r() * 0.05, cz, ry + (r() - 0.5) * 0.25));
       } else if (ch === 'X') {
+        // a rubble heap in the middle of the cell; only the heap collides
         const pick = ['CinderBlock', 'Pallet_Broken', 'TrashBag_1', 'Barrel'];
-        for (let i = 0; i < 3; i++) out.push({ pack: 'urban', name: pick[Math.floor(r() * pick.length)], m: new THREE.Matrix4().compose(this.w(x + 0.2 + r() * 0.6, y + 0.2 + r() * 0.6, 0), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * 6.28), new THREE.Vector3(1, 1, 1)), solid: false });
+        for (let i = 0; i < 3; i++) out.push({ pack: 'urban', name: pick[Math.floor(r() * pick.length)], m: new THREE.Matrix4().compose(this.w(x + 0.32 + r() * 0.36, y + 0.32 + r() * 0.36, 0), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * 6.28), new THREE.Vector3(1, 1, 1)), solid: false });
+        g.addBox(cx - 0.62, cz - 0.62, cx + 0.62, cz + 0.62, true, false);
       }
     }
     if (!water.empty) { const geo = water.build(); const m = new THREE.Mesh(geo, waterMaterial()); m.receiveShadow = true; this.add(m, geo); }

@@ -10,6 +10,7 @@ export interface TileInfo {
   sight?: boolean;      // true => does NOT block sight (fences, windows)
   height?: number;      // wall height override
   low?: boolean;        // low obstacle (fence) - camera can pass above
+  thin?: boolean;       // collides only through its real shape (boxes), not the whole cell; ground under it
 }
 
 export const TILES: Record<string, TileInfo> = {
@@ -39,9 +40,9 @@ export const TILES: Record<string, TileInfo> = {
   'N': { kind: 'wall', wall: 'metal_green' },
   'R': { kind: 'wall', wall: 'rock', height: 6 },
   'T': { kind: 'wall', wall: 'tree' },
-  'F': { kind: 'wall', wall: 'fence', sight: true, height: 1.25, low: true },
+  'F': { kind: 'wall', wall: 'fence', sight: true, height: 1.25, low: true, thin: true },
   'v': { kind: 'wall', wall: 'window', sight: true },
-  'X': { kind: 'wall', wall: 'rubble', sight: true, low: true, height: 1.1 },
+  'X': { kind: 'wall', wall: 'rubble', sight: true, low: true, height: 1.1, thin: true },
   '~': { kind: 'water', floor: 'water', step: 'water' },
   ' ': { kind: 'void' },
   'D': { kind: 'door', step: 'wood' },
@@ -74,12 +75,12 @@ export class Grid {
     for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
       const info = this.info(x, y);
       let f = 0;
-      if (info.kind === 'wall' || info.kind === 'void' || info.kind === 'water') f |= BLOCK_MOVE;
+      if ((info.kind === 'wall' && !info.thin) || info.kind === 'void' || info.kind === 'water') f |= BLOCK_MOVE;
       if ((info.kind === 'wall' && !info.sight) || info.kind === 'void') f |= BLOCK_SIGHT;
       if ((info.kind === 'wall' && !info.low) || info.kind === 'void') f |= BLOCK_CAM;
       if (info.kind === 'door') f |= IS_DOOR | BLOCK_MOVE | BLOCK_SIGHT | BLOCK_CAM; // closed until opened
       this.flags[y * this.w + x] = f;
-      this.navBlock[y * this.w + x] = f & BLOCK_MOVE ? 1 : 0;
+      this.navBlock[y * this.w + x] = f & BLOCK_MOVE || info.thin ? 1 : 0; // AI still routes around fences/rubble
     }
   }
 

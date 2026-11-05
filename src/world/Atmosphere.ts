@@ -64,6 +64,19 @@ export class Atmosphere {
     this.group.add(this.dust);
   }
 
+  /** Roof cover map (1 = under a roof), sampled by the rain shader. */
+  private cover: THREE.DataTexture = (() => { const t = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat); t.needsUpdate = true; return t; })();
+  setCover(cells: Uint8Array, w: number, h: number, tile: number, roofH: number) {
+    this.cover.dispose();
+    const t = new THREE.DataTexture(cells, w, h, THREE.RedFormat);
+    t.magFilter = t.minFilter = THREE.NearestFilter; t.needsUpdate = true;
+    this.cover = t;
+    if (this.rain) {
+      const u = (this.rain.material as THREE.ShaderMaterial).uniforms;
+      u.uCover.value = t; u.uCoverSize.value.set(w * tile, h * tile); u.uRoofH.value = roofH;
+    }
+  }
+
   private buildRain(n: number) {
     const g = new THREE.BufferGeometry();
     const p = new Float32Array(n * 6), s = new Float32Array(n * 2);
@@ -75,8 +88,8 @@ export class Atmosphere {
     g.setAttribute('seed', new THREE.BufferAttribute(s, 1));
     const m = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false,
-      uniforms: { uTime: shared.uTime, uCam: { value: new THREE.Vector3() }, uWind: { value: new THREE.Vector2(0.8, 0.3) } },
-      vertexShader: `attribute float seed; uniform float uTime; uniform vec3 uCam; uniform vec2 uWind; varying float vA;
+      uniforms: { uTime: shared.uTime, uCam: { value: new THREE.Vector3() }, uWind: { value: new THREE.Vector2(0.8, 0.3) }, uCover: { value: this.cover }, uCoverSize: { value: new THREE.Vector2(1, 1) }, uRoofH: { value: -1 } },
+      vertexShader: `attribute float seed; uniform float uTime; uniform vec3 uCam; uniform vec2 uWind; uniform sampler2D uCover; uniform vec2 uCoverSize; uniform float uRoofH; varying float vA;
         void main(){
           float tail = step(5.0, seed); float sd = seed - tail * 10.0;
           vec3 p = position; float speed = 9.0 + sd * 4.0;
@@ -85,6 +98,9 @@ export class Atmosphere {
           vec3 w = base + mod(p - base, vec3(24.0, 10.0, 24.0));
           w.y += tail * 0.35; w.xz -= uWind * tail * 0.03;
           vA = mix(0.0, 0.16, tail) * smoothstep(0.0, 1.5, w.y) * smoothstep(1.0, 4.0, length(w - uCam));
+          // no rain under roofs (indoors), but it keeps falling above them
+          vec2 cuv = w.xz / uCoverSize;
+          if (cuv.x > 0.0 && cuv.y > 0.0 && cuv.x < 1.0 && cuv.y < 1.0) vA *= 1.0 - texture2D(uCover, cuv).r * step(w.y, uRoofH);
           gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
         }`,
       fragmentShader: `varying float vA; void main(){ gl_FragColor = vec4(vec3(0.62, 0.68, 0.74), vA); }`,

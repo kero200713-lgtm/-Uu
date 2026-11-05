@@ -41,6 +41,8 @@ export interface AreaDef {
   ceiling?: number;
   defaultWall?: string;
   voidFill?: 'trees' | 'rock' | 'none';
+  /** furnish indoor rooms automatically by floor type (see Level.dressRooms) */
+  dress?: boolean;
   env: AreaEnv;
   entities: EntityDef[];
   onEnter?: string;

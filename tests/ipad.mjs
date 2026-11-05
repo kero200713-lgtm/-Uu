@@ -67,7 +67,7 @@ await page.screenshot({ path: `${OUT}/ipad-move.png` });
 await touch('touchEnd', []);
 check('joystick moves the player', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 0.8, JSON.stringify({ p0, p1 }));
 check('camera drag turns the view while moving', Math.abs(p1.yaw - p0.yaw) > 0.05, `dyaw=${(p1.yaw - p0.yaw).toFixed(3)}`);
-await page.waitForTimeout(600);
+await page.waitForFunction(() => Math.hypot(window.__game.player.vel.x, window.__game.player.vel.z) < 0.6, null, { timeout: 20000 }).catch(() => {});
 check('joystick released', await G(() => Math.hypot(window.__game.player.vel.x, window.__game.player.vel.z) < 0.6));
 
 // ---- contextual / top buttons

@@ -5,7 +5,7 @@ export const town: AreaDef = {
   id: 'town',
   name: { tr: 'Karaçam', en: 'Karaçam' },
   subtitle: { tr: 'Nüfus: 2.140 (1996)', en: 'Population: 2,140 (1996)' },
-  voidFill: 'trees', wallHeight: 3.6, ceiling: 3, defaultWall: 'bricks',
+  voidFill: 'trees', wallHeight: 3.6, ceiling: 3, defaultWall: 'bricks', dress: true,
   grid: [
     'FFFFFFFFFFFFFFFFFFFGFFFFFFFFFFFFFFFFFFFF',
     'F;;;;;;;;;;;;;;;;_===_;;;;;;;;;;;;;;;;;F',

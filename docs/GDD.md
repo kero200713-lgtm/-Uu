@@ -112,6 +112,7 @@ Her bölge girişinde otomatik kayıt, her bölgede bir telsiz (manuel kayıt) v
 ## 12. Sanat yönü
 * Gerçekçiye yakın, düşük doygunluklu, 2000'ler Türk taşra dokusu: beton, sac, paslı metal, çam ormanı, eski sağlık ocağı yeşili, Sovyet-vari maden tesisi.
 * Karakterler tek ortak taban gövde + bölgeye/role göre elle boyanmış dokular (`tools/pipeline/paint_characters.py`). Ela omuz hizasında saç modeli kullanır; saç kartlarının arasında kafa derisi görünmesin diye gövdenin saçlı bölgesinden yüklemede ince bir "saç kapağı" kabuğu üretilir ve aynı saç dokusuyla kaplanır (`buildHairCap`). Boyalı saç çizgisi alnın üstünde kalır. Ceket gövdeye yapışık durmasın diye yüklemede düzgünleştirilip hafifçe şişirilir (`src/player/Player.ts`).
+* İç mekânlar: kasabadaki odalar zemin türü ve büyüklüğüne göre (oturma odası, yatak odası, mutfak, banyo, dükkân, ofis) otomatik döşenir: duvar diplerinde mobilya, pencerelerde perde, büyük odaların ortasında oturma köşesi, yemek masası, raf koridoru ya da çalışma masası adacıkları (`Level.dressRooms`). Kapı önleri, hikâye eşyaları ve elle yerleştirilmiş modeller boş bırakılır.
 * Enfeksiyon dili: soğuk camgöbeği damarlar, yavaş nabız atan parıltı. Oyuklar insan kalır; ne kadar ileri gidilirse o kadar bozulurlar.
 
 ## 13. Teknik bütçe (düşük kalite, orta segment telefon hedefi)
