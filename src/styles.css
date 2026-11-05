@@ -113,6 +113,9 @@ body.touch .hud-ammo { top: calc(70px + var(--sa-t)); }
 .tb-heal { width: 50px; height: 50px; left: calc(170px + var(--sa-l)); top: calc(10px + var(--sa-t)); color: var(--warn); border-color: rgba(217,163,91,0.6); }
 .tb.small { width: 46px; height: 46px; top: calc(12px + var(--sa-t)); }
 .tb-flash { right: calc(124px + var(--sa-r)); } .tb-inv { right: calc(72px + var(--sa-r)); } .tb-pause { right: calc(20px + var(--sa-r)); }
+.tb-guard { width: 72px; height: 72px; right: calc(134px + var(--sa-r)); bottom: calc(30px + var(--sa-b)); }
+.tb-dodge { width: 62px; height: 62px; right: calc(300px + var(--sa-r)); bottom: calc(38px + var(--sa-b)); }
+#touch.lefty .tb-guard { right: auto; left: calc(134px + var(--sa-l)); } #touch.lefty .tb-dodge { right: auto; left: calc(300px + var(--sa-l)); }
 .tb-run { width: 58px; height: 58px; right: calc(224px + var(--sa-r)); bottom: calc(112px + var(--sa-b)); }
 .tb-switch { width: 58px; height: 58px; right: calc(150px + var(--sa-r)); bottom: calc(190px + var(--sa-b)); }
 .tb-switch .wname { position: absolute; bottom: -17px; font-size: 10px; letter-spacing: 0.08em; white-space: nowrap; color: var(--text); opacity: 0.8; text-transform: uppercase; }
@@ -237,6 +240,10 @@ body.touch .hud-ammo { top: calc(70px + var(--sa-t)); }
   .menu-title p { margin-bottom: 14px; }
   .inv-grid { grid-template-columns: repeat(4, minmax(52px, 1fr)); gap: 6px; }
   .area-title { top: 26%; }
+}
+@media (max-width: 600px) {
+  .tb-dodge { right: calc(224px + var(--sa-r)); bottom: calc(184px + var(--sa-b)); }
+  #touch.lefty .tb-dodge { left: calc(224px + var(--sa-l)); }
 }
 @media (orientation: portrait) and (max-width: 700px) {
   #inventory { grid-template-columns: 1fr; grid-template-rows: auto minmax(160px, 1fr); }

@@ -48,7 +48,7 @@ for (const w of ['pistol', 'shotgun']) {
     const axis = w === 'pistol' ? new V(0, 0, 1) : new V(1, 0, 0);
     const Q = p.root.quaternion.constructor;
     const dir = axis.applyQuaternion(mesh.getWorldQuaternion(new Q())).normalize();
-    const mz = mesh.localToWorld(w === 'pistol' ? new V(0, 0.058, 0.12) : new V(0.52, 0.12, 0));
+    const mz = mesh.localToWorld(w === 'pistol' ? new V(0, 0.118, 0.112) : new V(0.52, 0.12, 0));
     const cam = p.aimTarget.clone().sub(mz).normalize(); // barrel must point at the crosshair point
     return +(Math.acos(Math.min(1, dir.dot(cam))) * 57.3).toFixed(1);
   }, [w, move]);

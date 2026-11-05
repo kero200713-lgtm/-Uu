@@ -873,6 +873,14 @@ export class Game implements World {
       canReload: p.firearm && (inv.mags[inv.equipped] ?? 0) < (w?.weapon?.mag ?? 0) && inv.reserveAmmo(inv.equipped) > 0,
       crouching: p.crouching, healAvail, weaponIcon: w ? w.icon : 'hand', flashOn: p.flashOn, grabbed: !!p.grabbedBy,
       weaponName: w ? L(w.name) : '', weaponCount: inv.weapons.length, running: input.runToggled,
+      combat: this.combatNear(), guarding: p.guarding,
     });
+  }
+
+  /** Something hostile is close (or hunting us nearby): show the dodge button. */
+  private combatNear() {
+    if (!this.enemies) return false;
+    const d = this.enemies.nearestThreat(this.player.pos);
+    return d < 7 || (d < 14 && this.enemies.chasing);
   }
 }

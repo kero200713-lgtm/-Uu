@@ -1,7 +1,7 @@
 import { settings } from './Settings';
 import { bus } from './Events';
 
-export type Action = 'fire' | 'aim' | 'interact' | 'reload' | 'crouch' | 'run' | 'flashlight' | 'inventory' | 'pause' | 'switch' | 'heal' | 'flare';
+export type Action = 'fire' | 'aim' | 'interact' | 'reload' | 'crouch' | 'run' | 'flashlight' | 'inventory' | 'pause' | 'switch' | 'heal' | 'flare' | 'guard' | 'dodge';
 
 /**
  * Unified input state. Touch controls, keyboard/mouse and gamepads all write
@@ -43,7 +43,7 @@ class InputState {
   attachKeyboardMouse(canvas: HTMLCanvasElement) {
     const map: Record<string, Action> = {
       KeyE: 'interact', KeyF: 'interact', KeyR: 'reload', KeyC: 'crouch', ControlLeft: 'crouch', ShiftLeft: 'run',
-      KeyL: 'flashlight', KeyT: 'flashlight', Tab: 'inventory', KeyI: 'inventory', Escape: 'pause', KeyP: 'pause', KeyQ: 'switch', KeyH: 'heal', KeyG: 'flare',
+      KeyL: 'flashlight', KeyT: 'flashlight', Tab: 'inventory', KeyI: 'inventory', Escape: 'pause', KeyP: 'pause', KeyQ: 'switch', KeyH: 'heal', KeyG: 'flare', KeyV: 'guard', Space: 'dodge', AltLeft: 'dodge',
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -97,7 +97,7 @@ class InputState {
     const lx = dz(p.axes[2]), ly = dz(p.axes[3]);
     this.look.x += lx * 14; this.look.y += ly * 14;
     const btn = (i: number) => p.buttons[i] && p.buttons[i].pressed;
-    const pairs: [number, Action][] = [[7, 'fire'], [6, 'aim'], [0, 'interact'], [2, 'reload'], [1, 'crouch'], [10, 'run'], [3, 'switch'], [9, 'pause'], [8, 'inventory'], [12, 'flashlight']];
+    const pairs: [number, Action][] = [[7, 'fire'], [6, 'aim'], [0, 'interact'], [2, 'reload'], [1, 'crouch'], [10, 'run'], [3, 'switch'], [9, 'pause'], [8, 'inventory'], [12, 'flashlight'], [4, 'guard'], [5, 'dodge']];
     for (const [i, a] of pairs) {
       const down = btn(i);
       if (down && !this.held.has(a)) { this.press(a); if (a === 'crouch') this.crouchToggled = !this.crouchToggled; }

@@ -13,7 +13,7 @@ export interface PlayerLike {
   flashOn: boolean;
   grabbedBy: any;
   invulnerable: number;
-  damage(amount: number, from: THREE.Vector3, opts?: { knock?: boolean; kind?: string }): void;
+  damage(amount: number, from: THREE.Vector3, opts?: { knock?: boolean; kind?: string; attacker?: { blocked(parry: boolean): void } }): void;
   startGrab(enemy: any): boolean;
   litLevel(): number;
 }

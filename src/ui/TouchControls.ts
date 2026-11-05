@@ -29,6 +29,8 @@ export class TouchControls {
       <div class="joy"><div class="joy-ring"></div><div class="joy-knob"></div></div>
       <div class="tb tb-fire" data-a="fire">${icon('fire', 34)}</div>
       <div class="tb tb-aim" data-a="aim">${icon('aim', 30)}</div>
+      <div class="tb tb-guard hidden" data-a="guard">${icon('shield', 30)}</div>
+      <div class="tb tb-dodge hidden" data-a="dodge">${icon('dodge', 28)}</div>
       <div class="tb tb-interact" data-a="interact">${icon('hand', 30)}<span class="lbl"></span></div>
       <div class="tb tb-reload" data-a="reload">${icon('reload', 24)}</div>
       <div class="tb tb-crouch" data-a="crouch">${icon('crouch', 26)}</div>
@@ -157,10 +159,14 @@ export class TouchControls {
   }
 
   /** Context: which buttons are relevant right now. */
-  update(ctx: { firearm: boolean; aiming: boolean; interact: string | null; canReload: boolean; crouching: boolean; healAvail: boolean; weaponIcon: string; weaponName?: string; weaponCount?: number; running?: boolean; flashOn: boolean; grabbed: boolean }) {
+  update(ctx: { firearm: boolean; aiming: boolean; interact: string | null; canReload: boolean; crouching: boolean; healAvail: boolean; weaponIcon: string; weaponName?: string; weaponCount?: number; running?: boolean; flashOn: boolean; grabbed: boolean; combat?: boolean; guarding?: boolean }) {
     if (!this.visible) return;
     const set = (k: string, v: boolean) => this.btns[k]?.el.classList.toggle('hidden', !v);
     set('aim', ctx.firearm && !ctx.grabbed);
+    // melee: the aim slot becomes a block button (hold); dodge only shows up in a fight
+    set('guard', !ctx.firearm && !ctx.grabbed);
+    set('dodge', !!ctx.combat && !ctx.grabbed);
+    this.btns.guard?.el.classList.toggle('on', !!ctx.guarding);
     set('reload', ctx.canReload && !ctx.grabbed);
     set('interact', !!ctx.interact || ctx.grabbed);
     set('heal', ctx.healAvail && !ctx.grabbed);

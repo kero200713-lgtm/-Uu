@@ -2,7 +2,7 @@
 // (audio only after a gesture), the build served under a GitHub Pages style
 // sub-path, and real multi-touch through CDP touch events:
 // menu tap -> new game -> joystick walk + simultaneous camera drag -> buttons
-// (flashlight, inventory, pause/resume) -> rotate to portrait and back.
+// (sprint, pipe block, flashlight, inventory, pause/resume) -> rotate to portrait and back.
 //   node tests/ipad.mjs            (DIST=<dir> to test another build, URL=<address> for a live deploy)
 import { chromium, devices } from './pw.mjs';
 import http from 'http'; import fs from 'fs'; import path from 'path';
@@ -78,6 +78,17 @@ check('sprint button makes Ela sprint', await G(() => window.__game.player.runni
 await touch('touchEnd', []);
 await page.waitForTimeout(400);
 check('releasing the stick ends the sprint', await G(() => !window.__input?.runToggled && !window.__game.player.running));
+
+// ---- pipe: the aim slot turns into a hold-to-block shield button
+await G(() => { window.__game.debugGive('pipe'); window.__game.player.equip('pipe'); });
+await page.waitForFunction(() => !document.querySelector('.tb-guard').classList.contains('hidden'), null, { timeout: 20000 }).catch(() => {});
+const gc = await center('.tb-guard');
+await touch('touchStart', [{ ...gc, id: 4 }]);
+await page.waitForFunction(() => window.__game.player.guarding, null, { timeout: 20000 }).catch(() => {});
+check('shield button blocks while held (pipe)', await G(() => window.__game.player.guarding));
+await touch('touchEnd', []);
+await page.waitForFunction(() => !window.__game.player.guarding, null, { timeout: 20000 }).catch(() => {});
+check('block drops on release', await G(() => !window.__game.player.guarding));
 
 // ---- contextual / top buttons
 const f0 = await G(() => window.__game.player.flashOn);

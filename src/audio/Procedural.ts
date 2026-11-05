@@ -101,6 +101,25 @@ export class Procedural {
     o.connect(g).connect(this.ui); o.start(t); o.stop(t + dur + 0.02);
   }
 
+  /**
+   * Metal-on-bone block: a few inharmonic partials with a fast decay over a short
+   * noise thump. `bright` 1 = a clean parry ring, 0 = a dull blocked hit.
+   */
+  clank(vol = 0.5, bright = 1) {
+    const c = this.ctx, t = c.currentTime;
+    const out = c.createGain(); out.gain.value = vol; out.connect(this.ui);
+    const base = 520 + Math.random() * 60;
+    for (const [m, a, d] of [[1, 0.5, 0.35], [2.76, 0.32, 0.22], [5.4, 0.2, 0.12], [8.9, 0.12, 0.07]] as const) {
+      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = base * m;
+      const g = c.createGain(); const dd = d * (0.45 + bright * 0.55);
+      g.gain.setValueAtTime(a * (0.35 + bright * 0.65), t); g.gain.exponentialRampToValueAtTime(0.0005, t + dd);
+      o.connect(g).connect(out); o.start(t); o.stop(t + dd + 0.02);
+    }
+    const s = this.noiseSrc(); const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900 + bright * 1800;
+    const g = c.createGain(); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    s.connect(f).connect(g).connect(out); s.start(t); s.stop(t + 0.12);
+  }
+
   rustle(vol = 0.25, dur = 0.35) {
     const c = this.ctx, t = c.currentTime;
     const s = this.noiseSrc(); const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2600; f.Q.value = 0.8;

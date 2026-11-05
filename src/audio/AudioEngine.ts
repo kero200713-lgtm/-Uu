@@ -34,6 +34,7 @@ export class AudioEngine {
   listener = new THREE.Vector3();
   proc: Procedural | null = null;
   private primed = false;
+  private lastVar = new Map<string, string>();
   private musicEls = new Map<string, { el: HTMLAudioElement; node: MediaElementAudioSourceNode | null; gain: GainNode | null }>();
   musicName: string | null = null;
   private variants = new Map<string, string[]>();
@@ -135,7 +136,12 @@ export class AudioEngine {
     if (!c || !this.ready || c.state !== 'running') return null;
     let key = name;
     const vars = this.variants.get(name);
-    if (!this.map[key] && vars) key = vars[Math.floor(Math.random() * vars.length)];
+    if (!this.map[key] && vars) {
+      // never the same variant twice in a row (footsteps sounded like one sample looping)
+      let k = Math.floor(Math.random() * vars.length);
+      if (vars.length > 1 && vars[k] === this.lastVar.get(name)) k = (k + 1 + Math.floor(Math.random() * (vars.length - 1))) % vars.length;
+      key = vars[k]; this.lastVar.set(name, key);
+    }
     const loopBuf = this.loops.get(name);
     const seg = this.map[key];
     if (!seg && !loopBuf) return null;

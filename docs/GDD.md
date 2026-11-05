@@ -47,6 +47,8 @@ Ara geri dönüşler: bölgeler çift yönlü kapılarla bağlıdır, önceki b�
 | Yürü / koş | Sol yarıda yüzen joystick (sonuna kadar it = koş) | Koşmak dayanıklılık harcar ve gürültü yapar |
 | Kamera | Sağ yarıda sürükle | Hassasiyet X/Y ayrı, Y ters çevrilebilir |
 | Nişan | Nişan butonu (dokun-aç/kapa) | Yumuşak nişan yardımı (kapatılabilir) |
+| Blok | Boru/çıplak elle nişan butonunun yerinde kalkan butonu (basılı tut) | Klavye V / sağ tık, gamepad LB |
+| Yuvarlan | Yalnızca düşman yakındayken beliren buton | Joystick yönüne, joystick boşsa kameraya doğru; Boşluk, gamepad RB |
 | Ateş / vuruş | Ateş butonu | Silaha göre bağlamsal |
 | Etkileşim | Yalnızca yakında bir şey varken beliren etiketli buton | "Al: Demir Boru", "Kaydet", "Aç" … |
 | Şarjör, İyileş | Yalnızca gerektiğinde görünür | İyileş butonu yalnızca can azken |
@@ -58,11 +60,15 @@ Kamera: omuz üstü, duvar çarpışmalı (küre süpürme + yumuşak geri dön�
 ## 7. Savaş
 | Silah | Hasar | Şarjör | Menzil | Gürültü | Rol |
 |---|---|---|---|---|---|
-| Demir boru | 30 | — | 1.9 m | 5 | Sınırsız; tam vücut tepeden vuruş (~1,3 sn, isabet ~0,4 sn), yakındaki düşmana yönelir, isabette kısa duraksama; sersemletir (0.7) |
+| Demir boru | 30 / 22 | — | 1.9 m | 5 | Sınırsız; kombo: tepeden ağır vuruş (isabet ~0,4 sn, sersemletir 0.7) → hızlı geri savuruş (22, nadiren sersemletir) → tekrar. Vuruş sırasında basılan tuş hafızada tutulur, isabetten ~0,2 sn sonra sıradaki vuruş başlar. Her vuruş dayanıklılık yer (8 / 6); bitkinken kombo olmaz. Yakındaki düşmana yönelir, isabette kısa duraksama |
 | 9mm tabanca | 28 | 10 | 45 m | 26 | Ana silah |
 | Pompalı tüfek | 7 × 17 | 4 | 18 m | 34 | Nadir; yere serer, panik butonu |
 | Çakı | — | tek kullanım | — | — | Yakalanınca otomatik kurtarır |
 | İşaret fişeği | — | — | atış | yüksek | Işık + ses: düşmanları çeker/oyalar |
+
+**Savunma (yakın dövüş):** blok basılı tutulunca boru iki elle göğüs önünde çapraz tutulur (çıplak elle kollar yüz önünde). Önden gelen darbenin yalnızca %22'si (boru) / %40'ı (el) geçer, karşılığında dayanıklılık harcanır; dayanıklılık biterse blok kırılır ve darbenin %70'i geçer. Bloğu darbeden hemen önce (ilk ~0,3 sn) kaldırmak **parry**dir: hasar yok, saldıran sendeler, metal "çın" sesi + kısa duraksama. Bloklu oyuncu yakalanamaz. Vuruşun toparlanma süresi blok veya yuvarlanmayla kesilebilir. **Yuvarlanma:** ~1,7 m, 0,42 sn dokunulmazlık, 14 dayanıklılık, 0,85 sn bekleme. Tamamen var olan animasyonlar + hafif prosedürel IK; ek çizim/ağ yükü yok.
+
+**Silah tutuşları:** tabanca (gerçek boyutlu, ~19 cm, tek çizim çağrısı) nişanda iki elle izosceles duruşta, nişan dışında iki elle alçak hazır pozisyonda; destek eli atış elini sarar. Boru yumruğun başparmak ekseni boyunca, sapın ucundan tutulur (önkola/dirseğe girmez); yürürken ucu ileri-aşağı.
 
 Kafaya isabet tüm silahlarda ×3 hasar verir (tek tabanca mermisi bir Oyuk'u düşürür) ve kafa geriye savrulur; gövde isabetleri gövdeyi sarsar, sendeletme eşiğini geçerse saldırıyı keser.
 

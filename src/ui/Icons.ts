@@ -30,6 +30,8 @@ const P: Record<string, string> = {
   flash: '<path d="M7 3h10l-2 6H9z"/><path d="M9 9h6v12H9zM12 13v3"/>',
   bag: '<path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',
+  shield: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M12 7v10M8.5 11h7"/>',
+  dodge: '<circle cx="15" cy="5" r="2"/><path d="M13 9l-4 3 2 3-3 5M13 9l3 3 4-1M9 12H5M11 15l4 1"/><path d="M3 7l3-2M2 11h3" opacity="0.6"/>',
   swap: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
   heart: '<path d="M2 12h4l2-4 3 9 3-11 2 6h6"/>',
   radio: '<rect x="3" y="9" width="18" height="11" rx="2"/><path d="M7 9L16 3M7 14h3M15 14.5a2 2 0 1 0 0 .1"/>',

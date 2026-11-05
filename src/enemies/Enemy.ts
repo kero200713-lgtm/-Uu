@@ -257,7 +257,7 @@ export class Enemy {
           const facing = -Math.sin(this.yaw) * tmp.x - Math.cos(this.yaw) * tmp.z;
           if (d < this.t.attackRange + 0.45 && facing > 0.35 && !p.dead) {
             if (Math.random() < this.t.grabChance && !p.grabbedBy && p.startGrab(this)) { this.set('grab'); }
-            else p.damage(this.t.attackDmg, this.pos, { knock: this.t.attackDmg >= 30 });
+            else p.damage(this.t.attackDmg, this.pos, { knock: this.t.attackDmg >= 30, attacker: this });
           }
         }
         break;
@@ -367,6 +367,13 @@ export class Enemy {
     if (th >= 0 && th <= maxD) best = { t: th, part: 'head' };
     for (const t of [tb, tl]) if (t >= 0 && t <= maxD && (!best || t < best.t - 0.05)) best = { t, part: 'body' };
     return best;
+  }
+
+  /** The player blocked this attack: a parry makes it reel back, a plain block only buys time. */
+  blocked(parry: boolean) {
+    if (this.state === 'dead') return;
+    this.attackCd = Math.max(this.attackCd, parry ? 1.8 : 0.9);
+    if (parry && !this.t.invincible) this.set('stagger');
   }
 
   /** Returns true if killed. */

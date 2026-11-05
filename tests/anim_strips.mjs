@@ -28,6 +28,10 @@ const actions = {
   throw: { weapon: 'pipe', run: "p.inv.add('flare', 1); p.throwFlare()", time: 1.1 },
   shoot: { weapon: 'pistol', run: "p.inv.mags.pistol = 5; p.state = 'normal'; window.__game.player.fireCd = 0; p.tryFire?.()", time: 0.6 },
   hurt: { weapon: 'pipe', run: 'p.damage(5, p.pos.clone().add({x:0,y:0,z:-1}))', time: 0.6 },
+  // heavy swing, fire pressed again at 0.3 s and 0.9 s: chains into the light return swing and back
+  combo: { weapon: 'pipe', run: 'p.startMelee()', time: 1.9, queue: [0.3, 0.9], ctl: true },
+  roll: { weapon: 'pipe', run: 'p.startDodge(window.__game.rig)', time: 0.8, ctl: true },
+  block: { weapon: 'pipe', run: "window.__input.held.add('guard')", time: 0.5, ctl: true },
 };
 for (const name of (process.argv[2] || 'melee').split(',')) {
   const a = actions[name]; if (!a) { console.log('unknown', name); continue; }
@@ -42,12 +46,16 @@ for (const name of (process.argv[2] || 'melee').split(',')) {
   const per = Math.max(1, Math.round(a.time / STEP / (FR - 1)));
   let t = 0;
   for (let i = 0; i < FR; i++) {
-    const state = await page.evaluate(([n, again, t]) => {
+    const state = await page.evaluate(([n, again, t, queue, ctl]) => {
       const g = window.__game, p = g.player;
-      for (let k = 0; k < n; k++) { p.update(1 / 15, g.rig, false); if (again && Math.abs(t + (k + 1) / 15 - again) < 1 / 30) { p.fireCd = 0; p.startMelee(); } }
+      for (let k = 0; k < n; k++) {
+        const tt = t + (k + 1) / 15;
+        if (queue.some((q) => Math.abs(tt - q) < 1 / 30)) p.meleeQueued = true;
+        p.update(1 / 15, g.rig, ctl); if (again && Math.abs(tt - again) < 1 / 30) { p.fireCd = 0; p.startMelee(); }
+      }
       g.rig.update(0.016, p.pos, 0, false); g.engine.render(0.016);
-      return p.state;
-    }, [i === 0 ? 0 : per, a.again || 0, t]);
+      return p.state + (p.state === 'melee' ? (p.meleeLight ? ' L' : ' H') : '');
+    }, [i === 0 ? 0 : per, a.again || 0, t, a.queue || [], !!a.ctl]);
     t += i === 0 ? 0 : per * STEP;
     const f = `${OUT}/_f${i}.png`; await page.screenshot({ path: f }); files.push(f + '|' + t.toFixed(2) + 's ' + state);
   }

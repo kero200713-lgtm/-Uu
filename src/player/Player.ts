@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { dressGarments } from './Garments';
+import { buildPipe, buildPistol, PIPE, PISTOL } from './WeaponModels';
 import { createHuman, Human } from './CharacterFactory';
 import { Animator } from './Animator';
 import { CameraRig } from './CameraRig';
@@ -159,11 +160,26 @@ function drapeFront(cur: Float32Array, w: Float32Array, side: 1 | -1, Y0: number
   }
 }
 
-type PState ='normal' | 'reload' | 'melee' | 'shoot' | 'heal' | 'interact' | 'hurt' | 'down' | 'grabbed' | 'dead' | 'locked' | 'throw';
+type PState ='normal' | 'reload' | 'melee' | 'shoot' | 'heal' | 'interact' | 'hurt' | 'down' | 'grabbed' | 'dead' | 'locked' | 'throw' | 'dodge';
+
+/** Second, quicker swing of a combo: less damage, rarely staggers (so blocking still matters). */
+const LIGHT_SWING: WeaponDef = { ...ITEMS.pipe.weapon!, damage: 22, stagger: 0.4, knockdown: 0 };
+/** Swing clips: contact frame (clip seconds), playback speed, and the gap after contact before a chained swing. */
+const MELEE = {
+  pipeHeavy: { clip: 'Sword_Attack', speed: 1.15, hit: 0.46, chain: 0.2 },
+  pipeLight: { clip: 'Sword_Regular_A', speed: 0.72, hit: 0.2, chain: 0.16 },
+  fistHeavy: { clip: 'Punch_Cross', speed: 1.2, hit: 0.3, chain: 0.14 },
+  fistLight: { clip: 'Melee_Hook', speed: 0.85, hit: 0.22, chain: 0.12 },
+  rollSpeed: 2.1,
+};
 
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion();
 const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _vc = new THREE.Vector3(), _vd = new THREE.Vector3(), _ve = new THREE.Vector3();
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4();
+const _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _vOne = new THREE.Vector3(1, 1, 1), _q3 = new THREE.Quaternion();
+const [_g1, _g2, _g3, _g4, _g5, _g6, _g7, _g8, _g9] = Array.from({ length: 9 }, () => new THREE.Vector3());
 
 export class Player implements PlayerLike {
   human!: Human; anim!: Animator;
@@ -188,6 +204,11 @@ export class Player implements PlayerLike {
   adrenalineT = 0;
   limp = 0;
   aimBlend = 0;
+  /** Melee block (hold): guardT counts from raising it — a block in the first moments is a parry. */
+  guarding = false; guardT = 0;
+  private guardBlend = 0; private guardBreakT = 0; private carryBlend = 0; private pistolBlend = 0;
+  private combo = 0; private meleeQueued = false; private meleeChainAt = 0; private meleeLight = false;
+  dodgeCd = 0; private dodgeDir = new THREE.Vector3();
   onFire: (w: WeaponDef, origin: THREE.Vector3) => void = () => {};
   onMelee: (w: WeaponDef) => void = () => {};
   /** Returns the yaw to swing at (soft target lock); identity by default. */
@@ -226,20 +247,20 @@ export class Player implements PlayerLike {
     const hand = this.anim.bone('hand_r')!;
     hand.add(this.weaponHolder);
     const mk = (name: string, s: number) => { const pg = assets.prop('items', name); const m = new THREE.Mesh(pg ? pg.geometry : new THREE.BoxGeometry(0.05, 0.15, 0.25), dynamicPropMaterial()); m.scale.setScalar(s); m.castShadow = true; return m; };
-    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.85, 8), new THREE.MeshStandardMaterial({ color: 0x5a5148, roughness: 0.55, metalness: 0.75 }));
-    pipe.castShadow = true;
-    const pistol = mk('W_Pistol', 1.0), shotgun = mk('Shotgun_1', 0.8);
+    const pipe = buildPipe();
+    const pistol = buildPistol(), shotgun = mk('Shotgun_1', 0.8);
     const g = (o: THREE.Object3D, p: number[], r: number[]) => { const h = new THREE.Group(); h.add(o); h.position.set(p[0], p[1], p[2]); h.rotation.set(r[0], r[1], r[2]); h.visible = false; this.weaponHolder.add(h); return h; };
-    this.weapons.set('pipe', g(pipe, [0.0, 0.09, 0.03], [0, 0, 0]));
+    this.weapons.set('pipe', g(pipe, [0, 0, 0], [0, 0, 0]));
     this.weapons.set('pistol', g(pistol, [0, 0, 0], [0, 0, 0]));
     this.weapons.set('shotgun', g(shotgun, [0, 0, 0], [0, 0, 0]));
     // firearms are fitted to the hand as it is in the aim pose: barrel along the aim,
-    // sights up, grip in the palm (W_Pistol: muzzle +Z, grip at the rear; Shotgun_1: muzzle +X)
-    this.fitGun(this.weapons.get('pistol')!, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0.058, -0.07));
+    // sights up, grip in the palm (pistol: muzzle +Z; Shotgun_1: muzzle +X)
+    this.fitGun(this.weapons.get('pistol')!, new THREE.Vector3(0, 0, 1), PISTOL.grip);
     this.fitGun(this.weapons.get('shotgun')!, new THREE.Vector3(1, 0, 0), new THREE.Vector3(-0.2 * 0.8, 0.05 * 0.8, 0));
     this.captureHands();
+    this.fitPipe(this.weapons.get('pipe')!);
     this.anim.full('Idle_Loop', { fade: 0 });
-    this.muzzles.pistol = this.muzzle; pistol.add(this.muzzle); this.muzzle.position.set(0, 0.058, 0.12);
+    this.muzzles.pistol = this.muzzle; pistol.add(this.muzzle); this.muzzle.position.copy(PISTOL.muzzle);
     const sm = new THREE.Object3D(); shotgun.add(sm); sm.position.set(0.52, 0.12, 0); this.muzzles.shotgun = sm;
     // compact chest lamp; mounted onto the jacket surface on the first posed frame
     const tp = assets.prop('items', 'Torch');
@@ -377,6 +398,108 @@ export class Player implements PlayerLike {
       this.rotWorld(A, n, sw);
     }
   }
+  /**
+   * Hand frames from the skeleton, in each hand's own (unit-scale) rotation frame:
+   * f = wrist -> middle knuckle, s = little finger -> index knuckle (the thumb side),
+   * hole = where a bar passes through the closed fist. Finger curl does not move the
+   * knuckle bones, so these hold for any pose.
+   */
+  private handFrame: Record<'l' | 'r', { f: THREE.Vector3; s: THREE.Vector3; hole: THREE.Vector3 }> | null = null;
+  private measureHands() {
+    this.root.updateMatrixWorld(true);
+    const out: any = {};
+    for (const sd of ['l', 'r'] as const) {
+      const h = this.anim.bone('hand_' + sd), m = this.anim.bone('middle_01_' + sd), i = this.anim.bone('index_01_' + sd), pk = this.anim.bone('pinky_01_' + sd);
+      if (!h || !m || !i || !pk) return;
+      const hp = h.getWorldPosition(new THREE.Vector3()), qi = h.getWorldQuaternion(new THREE.Quaternion()).invert();
+      const f = m.getWorldPosition(new THREE.Vector3()).sub(hp); const len = f.length(); f.normalize();
+      const side = i.getWorldPosition(new THREE.Vector3()).sub(pk.getWorldPosition(new THREE.Vector3()));
+      side.addScaledVector(f, -side.dot(f)).normalize();
+      const n = new THREE.Vector3().crossVectors(f, side).multiplyScalar(this.palmSign[sd]); // out of the palm
+      const hole = f.clone().multiplyScalar(len * 0.8).addScaledVector(n, 0.026);
+      out[sd] = { f: f.applyQuaternion(qi), s: side.applyQuaternion(qi), hole: hole.applyQuaternion(qi) };
+    }
+    this.handFrame = out;
+  }
+  /**
+   * The pipe sits in the closed right fist like a real bar: through the fist's hole,
+   * along the thumb side (so it never runs back along the forearm into the elbow),
+   * held near the butt with the elbow fitting on the knuckle side.
+   */
+  private fitPipe(group: THREE.Object3D) {
+    this.measureHands();
+    const hand = this.anim.bone('hand_r'), H = this.handFrame?.r;
+    if (!hand || !H) return;
+    const q = hand.getWorldQuaternion(new THREE.Quaternion()), hp = hand.getWorldPosition(new THREE.Vector3());
+    const Y = H.s.clone().applyQuaternion(q), Z = H.f.clone().applyQuaternion(q), X = new THREE.Vector3().crossVectors(Y, Z);
+    const hole = hp.add(H.hole.clone().applyQuaternion(q));
+    const world = new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(hole.addScaledVector(Y, -PIPE.grip));
+    this.weaponHolder.updateWorldMatrix(true, false);
+    const local = new THREE.Matrix4().copy(this.weaponHolder.matrixWorld).invert().multiply(world);
+    local.decompose(group.position, group.quaternion, group.scale);
+    this.gunFit.set(group, { local: local.clone(), handRel: new THREE.Matrix4() });
+  }
+  /** World rotation that turns a hand's local finger/thumb axes onto f / s (s is made orthogonal). */
+  private handQuat(sd: 'l' | 'r', f: THREE.Vector3, s: THREE.Vector3, out: THREE.Quaternion) {
+    const H = this.handFrame![sd];
+    _va.copy(H.f); _vb.copy(H.s); _vc.crossVectors(_va, _vb);
+    _m1.makeBasis(_va, _vb, _vc).transpose();
+    _vd.copy(f).normalize(); _ve.copy(s).addScaledVector(_vd, -s.dot(_vd)).normalize(); _vc.crossVectors(_vd, _ve);
+    _m2.makeBasis(_vd, _ve, _vc);
+    return out.setFromRotationMatrix(_m2.multiply(_m1));
+  }
+  /**
+   * Puts one hand so that its fist hole is at `at` with the given axes, through
+   * two-bone IK, blended by k from the animated pose.
+   */
+  private placeFist(sd: 'l' | 'r', at: THREE.Vector3, f: THREE.Vector3, s: THREE.Vector3, pole: THREE.Vector3, k: number) {
+    const h = this.anim.bone('hand_' + sd); if (!h || !this.handFrame) return;
+    const q = this.handQuat(sd, f, s, _q1);
+    const wrist = _v1.copy(this.handFrame[sd].hole).applyQuaternion(q).negate().add(at);
+    if (k < 0.999) { h.getWorldPosition(_v2); wrist.lerpVectors(_v2, wrist, k); h.getWorldQuaternion(_q2); q.slerpQuaternions(_q2, q, k); }
+    this.ik(`upperarm_${sd}`, `lowerarm_${sd}`, `hand_${sd}`, wrist, pole);
+    this.setWorldQuat(h, q);
+  }
+  /**
+   * Block: with the pipe both fists hold it slanted across the chest (right hand on
+   * the taped butt, left further up, elbow fitting toward the attacker); bare-handed
+   * the forearms come up in front of the face.
+   */
+  private holdGuard(pipe: boolean) {
+    const k = this.guardBlend, chestB = this.anim.bone('spine_03');
+    if (!chestB || !this.handFrame) return;
+    const up = Player.UP, fwd = _g1.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)), right = _g2.crossVectors(fwd, up);
+    const chest = chestB.getWorldPosition(_g3);
+    const poleR = _g4.copy(chest).addScaledVector(up, -0.55).addScaledVector(right, 0.45).addScaledVector(fwd, -0.1);
+    const poleL = _g5.copy(chest).addScaledVector(up, -0.55).addScaledVector(right, -0.45).addScaledVector(fwd, -0.1);
+    if (pipe) {
+      const A = _g6.copy(right).multiplyScalar(-0.86).addScaledVector(up, 0.48).addScaledVector(fwd, 0.1).normalize(); // butt -> head
+      const knuck = _g7.copy(fwd).addScaledVector(A, -fwd.dot(A)).normalize();
+      const R = _g8.copy(chest).addScaledVector(fwd, 0.36).addScaledVector(right, 0.15).addScaledVector(up, -0.04);
+      this.placeFist('r', R, knuck, A, poleR, k);
+      const Lp = _g9.copy(R).addScaledVector(A, PIPE.support - PIPE.grip);
+      this.placeFist('l', Lp, knuck, A, poleL, k);
+    } else {
+      const knuck = _g6.copy(up).multiplyScalar(0.85).addScaledVector(fwd, 0.4);
+      const R = _g8.copy(chest).addScaledVector(fwd, 0.27).addScaledVector(right, 0.1).addScaledVector(up, 0.22);
+      this.placeFist('r', R, knuck, _g7.copy(right).negate().addScaledVector(fwd, -0.3), poleR, k);
+      const Lp = _g9.copy(chest).addScaledVector(fwd, 0.31).addScaledVector(right, -0.1).addScaledVector(up, 0.25);
+      this.placeFist('l', Lp, knuck, _g7.copy(right).addScaledVector(fwd, -0.3), poleL, k);
+    }
+  }
+  /** Walking around with the pipe: tip forward and down, wrist in line with the forearm. */
+  private carryPipe() {
+    const h = this.anim.bone('hand_r'), fa = this.anim.bone('lowerarm_r');
+    if (!h || !fa || !this.handFrame) return;
+    const up = Player.UP, fwd = _g1.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)), right = _g2.crossVectors(fwd, up);
+    const s = _g6.copy(fwd).multiplyScalar(0.62).addScaledVector(up, -0.7).addScaledVector(right, 0.24).normalize();
+    const f = h.getWorldPosition(_g7).sub(fa.getWorldPosition(_g8)).normalize();
+    if (Math.abs(f.dot(s)) > 0.97) return;
+    f.addScaledVector(s, -f.dot(s)).normalize(); // keep the pipe direction exact
+    const q = this.handQuat('r', f, s, _q1);
+    h.getWorldQuaternion(_q2); _q2.slerp(q, this.carryBlend);
+    this.setWorldQuat(h, _q2);
+  }
   private restoreGunFit(eq: string) {
     const g = this.weapons.get(eq); const f = g && this.gunFit.get(g);
     if (f) f.local.decompose(g!.position, g!.quaternion, g!.scale);
@@ -429,6 +552,52 @@ export class Player implements PlayerLike {
     // the gun hangs off the right hand bone: express the wanted world pose in its space
     this.weaponHolder.updateWorldMatrix(true, false);
     new THREE.Matrix4().copy(this.weaponHolder.matrixWorld).invert().multiply(gunW).decompose(g.position, g.quaternion, g.scale);
+  }
+
+  /**
+   * Pistol, two hands: raised, an isosceles hold centred in front of the chest with the
+   * barrel on the crosshair point; lowered, a compressed low ready (muzzle toward the
+   * ground a few metres ahead). The support hand cups the shooting hand on the grip.
+   * Blended by `k` from the animated pose so reloads and hits ease in and out.
+   */
+  private holdPistol(rig: CameraRig, k: number) {
+    const g = this.weapons.get('pistol'), fit = g && this.gunFit.get(g);
+    const shR = this.anim.bone('upperarm_r'), shL = this.anim.bone('upperarm_l'), hR = this.anim.bone('hand_r'), hL = this.anim.bone('hand_l');
+    if (!g || !fit || !shR || !shL || !hR || !hL || !this.handFrame) return;
+    const a = this.aimBlend, up = Player.UP;
+    const fwd = _g1.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)), right = _g2.crossVectors(fwd, up);
+    const S = shR.getWorldPosition(_g3).add(shL.getWorldPosition(_g4)).multiplyScalar(0.5); // between the shoulders
+    const aimDir = rig.forward(_g5);
+    if (this.aimTarget) { const to = _g6.copy(this.aimTarget).sub(S); if (to.lengthSq() > 1 && to.normalize().dot(aimDir) > 0.6) aimDir.copy(to); }
+    // grip point and barrel direction, aimed vs low ready
+    const Pa = _g6.copy(S).addScaledVector(up, -0.07).addScaledVector(aimDir, 0.44).addScaledVector(right, 0.02);
+    const Pl = _g7.copy(S).addScaledVector(up, -0.3).addScaledVector(fwd, 0.3).addScaledVector(right, 0.04);
+    const Dl = _g8.copy(fwd).multiplyScalar(0.72).addScaledVector(up, -0.66).addScaledVector(right, -0.12).normalize();
+    const P = Pl.lerp(Pa, a), D = Dl.lerp(aimDir, a).normalize();
+    D.addScaledVector(up, 0.22 * this.gunKick).normalize(); P.addScaledVector(D, -0.035 * this.gunKick);
+    const Y = _g9.copy(up).addScaledVector(D, -up.dot(D)).normalize(), X = _v2.crossVectors(Y, D);
+    _m1.makeBasis(X, Y, D); _q1.setFromRotationMatrix(_m1);
+    const gunW = _m2.compose(_v1.copy(PISTOL.grip).applyQuaternion(_q1).negate().add(P), _q1, _vOne);
+    // shooting hand: the grip it was fitted with
+    _m3.multiplyMatrices(gunW, fit.handRel).decompose(_v1, _q2, _v3);
+    hR.getWorldPosition(_v4); _v1.lerpVectors(_v4, _v1, k);
+    hR.getWorldQuaternion(_q3); _q3.slerp(_q2, k);
+    this.ik('upperarm_r', 'lowerarm_r', 'hand_r', _v1, _v4.copy(S).addScaledVector(up, -0.7).addScaledVector(right, 0.5));
+    this.setWorldQuat(hR, _q3);
+    // gun follows the right hand bone
+    this.weaponHolder.updateWorldMatrix(true, false);
+    _m3.copy(this.weaponHolder.matrixWorld).invert().multiply(gunW);
+    if (k < 0.999) { _m3.decompose(_v1, _q2, _v3); fit.local.decompose(_v4, _q3, _v5); g.position.lerpVectors(_v4, _v1, k); g.quaternion.slerpQuaternions(_q3, _q2, k); g.scale.copy(_v3); }
+    else _m3.decompose(g.position, g.quaternion, g.scale);
+    // support hand: fingers over the shooting hand's, thumb along the frame
+    hR.updateWorldMatrix(true, false); hR.getWorldQuaternion(_q2);
+    const H = this.handFrame.r;
+    const fR = _v1.copy(H.f).applyQuaternion(_q2), sR = _v3.copy(H.s).applyQuaternion(_q2);
+    const hole = _v4.copy(H.hole).applyQuaternion(_q2).add(hR.getWorldPosition(_v5));
+    // mirror the shooting fist across the gun's vertical plane, then shift it to the left of the grip
+    const fL = _g3.copy(fR).addScaledVector(X, -2 * fR.dot(X)), sL = _g4.copy(sR).addScaledVector(X, -2 * sR.dot(X));
+    hole.addScaledVector(X, -0.036).addScaledVector(D, 0.012).addScaledVector(Y, -0.012);
+    this.placeFist('l', hole, fL, sL, _g5.copy(S).addScaledVector(up, -0.7).addScaledVector(right, -0.5), k);
   }
 
   /**
@@ -511,7 +680,7 @@ export class Player implements PlayerLike {
 
   spawn(pos: THREE.Vector3, yaw: number) {
     this.pos.copy(pos); this.yaw = yaw; this.root.rotation.y = yaw; this.vel.set(0, 0, 0);
-    this.state = 'normal'; this.grabbedBy = null; this.updateWeaponVisual();
+    this.state = 'normal'; this.grabbedBy = null; this.guarding = false; this.meleeQueued = false; this.updateWeaponVisual();
   }
 
   equip(id: string) {
@@ -532,7 +701,7 @@ export class Player implements PlayerLike {
 
   // ------------------------------------------------------------- update --
   update(dt: number, rig: CameraRig, controlsEnabled: boolean) {
-    this.stateT += dt; this.fireCd -= dt; this.invulnerable -= dt; this.adrenalineT -= dt;
+    this.stateT += dt; this.fireCd -= dt; this.invulnerable -= dt; this.adrenalineT -= dt; this.dodgeCd -= dt; this.guardBreakT -= dt;
     this.spread = Math.max(0, this.spread - dt * 0.08); this.recoil = Math.max(0, this.recoil - dt * 0.6);
     const lvl = this.level!;
     lvl.baker.sample(this.pos.x, this.pos.z, this.bake);
@@ -544,6 +713,13 @@ export class Player implements PlayerLike {
     if (allow && input.wasPressed('crouch')) { this.crouching = !this.crouching; input.crouchToggled = this.crouching; }
     if (allow && input.wasPressed('flashlight')) this.toggleFlash();
     if (allow && input.wasPressed('switch')) this.cycleWeapon();
+    // ---- block (melee weapon or bare hands): hold; also cuts a swing's recovery short
+    const wantGuard = allow && !this.firearm && this.guardBreakT <= 0 && (input.isDown('guard') || input.isDown('aim'));
+    if (wantGuard && this.state === 'melee' && this.stateT > this.meleeHitT + 0.08) this.endMelee();
+    if (wantGuard && (this.state === 'normal' || this.state === 'hurt')) {
+      if (!this.guarding) { this.guarding = true; this.guardT = 0; audio.proc?.rustle(0.16, 0.18); } else this.guardT += dt;
+    } else this.guarding = false;
+    if (allow && input.wasPressed('dodge')) this.startDodge(rig);
 
     // ---- movement
     let mx = allow ? input.move.x : 0, my = allow ? input.move.y : 0;
@@ -553,7 +729,7 @@ export class Player implements PlayerLike {
     // sprint only on request (sprint button / Shift): a fully pushed stick is a normal run
     let wantRun = allow && input.running && !aiming && !this.crouching && mag > 0.35;
     if (this.staminaLock) wantRun = false;
-    if (this.limp > 0) wantRun = false;
+    if (this.limp > 0 || this.guarding) wantRun = false;
     this.running = wantRun && this.adrenalineT <= 0 ? this.stamina > 0 : wantRun;
     let speed = 0;
     if (mag > 0.08) {
@@ -561,11 +737,12 @@ export class Player implements PlayerLike {
       speed = this.running ? 4.7 : base * Math.min(1, mag / 0.6 + 0.2);
       if (busy) speed *= this.state === 'heal' || this.state === 'reload' ? 0.45 : this.state === 'melee' ? 0.12 : 0.25;
       if (this.hp < 25) speed *= 0.82;
+      if (this.guarding) speed *= 0.42;
     }
     // stamina
     // ~12 s of sprinting from full, refills in ~5 s after a short pause
     if (this.running && speed > 3 && this.adrenalineT <= 0) { this.stamina -= dt * 8.5; this.staminaDelay = 0.8; if (this.stamina <= 0) { this.stamina = 0; this.staminaLock = true; input.runToggled = false; audio.play('p_breath', { volume: 0.5 }); } }
-    else { this.staminaDelay -= dt; if (this.staminaDelay <= 0) this.stamina = Math.min(100, this.stamina + dt * 20); if (this.staminaLock && this.stamina > 30) this.staminaLock = false; }
+    else { this.staminaDelay -= dt; if (this.staminaDelay <= 0) this.stamina = Math.min(100, this.stamina + dt * (this.guarding ? 8 : 20)); if (this.staminaLock && this.stamina > 30) this.staminaLock = false; }
 
     const camYaw = rig.yaw;
     const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
@@ -577,6 +754,11 @@ export class Player implements PlayerLike {
     this.vel.x += (targetVx - this.vel.x) * Math.min(1, dt * acc);
     this.vel.z += (targetVz - this.vel.z) * Math.min(1, dt * acc);
     if (['down', 'grabbed', 'dead', 'locked'].includes(this.state)) this.vel.multiplyScalar(0.0);
+    if (this.state === 'dodge') {
+      // roll: a quick burst that bleeds off (~1.7 m), steered only at the start
+      const sp = Math.max(0, 6.4 * (1 - this.stateT / 0.56));
+      this.vel.x = this.dodgeDir.x * sp; this.vel.z = this.dodgeDir.z * sp;
+    }
     this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt;
     lvl.grid.collide(this.pos, 0.3);
     const v = Math.hypot(this.vel.x, this.vel.z);
@@ -585,6 +767,8 @@ export class Player implements PlayerLike {
     // ---- facing
     if (aiming || this.state === 'shoot') {
       this.turnTo(camYaw, dt, 14);
+    } else if (this.guarding) {
+      this.turnTo(this.meleeYaw(camYaw), dt, 12); // block toward the closest attacker in view
     } else if (v > 0.2 && !['down', 'grabbed'].includes(this.state)) {
       this.turnTo(Math.atan2(-this.vel.x, -this.vel.z), dt, this.running ? 7 : 9);
     }
@@ -597,8 +781,10 @@ export class Player implements PlayerLike {
       if (this.stepDist > stride) {
         this.stepDist = 0;
         const surf = lvl.grid.stepSurface(this.pos.x, this.pos.z);
-        const vol = this.crouching ? 0.22 : this.running ? 0.75 : v > 2.5 ? 0.55 : 0.4;
-        audio.play('st_' + (surf === 'water' ? 'dirt' : surf), { volume: vol, rate: surf === 'water' ? 0.8 : 1, vary: 0.08 });
+        // quieter than before (owner: wood and grass were too loud), softer still on wood/grass
+        const sm = surf === 'wood' ? 0.78 : surf === 'dirt' ? 0.82 : 1;
+        const vol = (this.crouching ? 0.14 : this.running ? 0.5 : v > 2.5 ? 0.36 : 0.26) * sm;
+        audio.play('st_' + (surf === 'water' ? 'dirt' : surf), { volume: vol, rate: surf === 'water' ? 0.8 : 1, vary: 0.12 });
         const r = this.crouching ? 0.9 : this.running ? 11 : v > 2.5 ? 6.5 : 3.2;
         noise.emit(this.pos, r * (surf === 'metal' ? 1.3 : surf === 'wood' ? 1.15 : 1), 'step');
       }
@@ -623,7 +809,11 @@ export class Player implements PlayerLike {
 
   private handleActions(dt: number, rig: CameraRig, aiming: boolean) {
     const w = this.weapon;
-    const busy = ['reload', 'heal', 'interact', 'melee', 'hurt', 'throw', 'down'].includes(this.state);
+    const busy = ['reload', 'heal', 'interact', 'melee', 'hurt', 'throw', 'down', 'dodge'].includes(this.state);
+    // combo: a press during a swing is remembered and the next swing follows as soon as
+    // this one has landed (no dead time where spamming did nothing)
+    if (input.wasPressed('fire') && w && !this.firearm && this.state === 'melee' && this.stateT > this.meleeHitT - 0.35) this.meleeQueued = true;
+    if (this.state === 'melee' && this.meleeQueued && this.stateT >= this.meleeChainAt) { if (this.staminaLock) this.meleeQueued = false; else this.startMelee(true); }
     if (input.wasPressed('reload') && this.firearm && !busy) this.startReload();
     if (input.wasPressed('heal') && !busy) this.useBestHeal();
     if (input.wasPressed('flare') && !busy) this.throwFlare();
@@ -687,24 +877,57 @@ export class Player implements PlayerLike {
   }
 
   /**
-   * Pipe: a committed overhead swing played on the whole body (hips and legs take
-   * part, movement nearly stops), at a speed that keeps the wind-up readable.
-   * The hit lands on the clip's contact frame and the next swing only starts once
-   * this one has recovered.
+   * Melee combo. First swing: the committed overhead blow played on the whole body
+   * (movement nearly stops). A press during it is buffered and, once the blow has
+   * landed, chains into a quick backhand return swing, then back to the overhead one.
+   * Every swing costs stamina; exhausted, swings no longer chain. Block or dodge
+   * cancel a swing's recovery once it has landed.
    */
-  startMelee() {
-    const w = ITEMS.pipe.weapon!;
-    if (this.fireCd > 0) return;
+  startMelee(chain = false) {
+    if (!chain && this.fireCd > 0) return;
     const pipe = this.inv.equipped === 'pipe';
-    const speed = pipe ? 1.15 : 1.2;
-    const len = (pipe ? 1.53 : 1.0) / speed;          // clip length at that speed
-    this.meleeHitT = (pipe ? 0.46 : 0.3) / speed;     // contact frame
-    this.fireCd = Math.max(w.fireDelay, len - 0.05);
+    this.combo = chain ? (this.combo + 1) % 2 : 0;
+    const light = this.combo === 1;
+    const c = pipe ? (light ? MELEE.pipeLight : MELEE.pipeHeavy) : (light ? MELEE.fistLight : MELEE.fistHeavy);
+    this.meleeHitT = c.hit / c.speed;                  // contact frame
+    this.meleeChainAt = this.meleeHitT + c.chain;      // earliest next swing
+    this.fireCd = this.meleeChainAt;
+    this.meleeLight = light; this.meleeQueued = false;
     this.state = 'melee'; this.stateT = 0;
     this.yaw = this.meleeYaw(this.yaw); this.root.rotation.y = this.yaw;
-    this.anim.full(pipe ? 'Sword_Attack' : 'Punch_Cross', { fade: 0.12, loop: false, speed, restart: true });
-    audio.play('swing', { volume: 0.7, delay: Math.max(0, this.meleeHitT - 0.1) });
+    this.anim.full(c.clip, { fade: chain ? 0.08 : 0.12, loop: false, speed: c.speed, restart: true });
+    if (this.adrenalineT <= 0) {
+      this.stamina = Math.max(0, this.stamina - (pipe ? 8 : 5) * (light ? 0.75 : 1)); this.staminaDelay = 0.8;
+      if (this.stamina <= 0) this.staminaLock = true;
+    }
+    audio.play('swing', { volume: light ? 0.55 : 0.7, rate: light ? 1.15 : 1, delay: Math.max(0, this.meleeHitT - 0.1) });
     (this as any)._meleeDone = false;
+  }
+  private endMelee() {
+    this.state = 'normal'; this.meleeQueued = false; this.fireCd = 0;
+    this.anim.full('Idle_Loop', { fade: 0.14 });
+  }
+
+  /**
+   * Dodge roll: toward the stick direction (or back toward the camera), a short
+   * burst of movement with brief invulnerability. Costs stamina, short cooldown.
+   */
+  private startDodge(rig: CameraRig) {
+    const st = this.state;
+    if (this.dead || this.grabbedBy || this.dodgeCd > 0) return;
+    if (!(st === 'normal' || st === 'shoot' || st === 'hurt' || (st === 'melee' && this.stateT > this.meleeHitT + 0.05))) return;
+    if (this.stamina < 10 && this.adrenalineT <= 0) { audio.play('p_breath', { volume: 0.35 }); return; }
+    const mx = input.move.x, my = input.move.y, sy = Math.sin(rig.yaw), cy = Math.cos(rig.yaw);
+    if (Math.hypot(mx, my) > 0.25) this.dodgeDir.set(mx * cy - my * sy, 0, -mx * sy - my * cy).normalize();
+    else this.dodgeDir.set(sy, 0, cy);
+    this.state = 'dodge'; this.stateT = 0; this.dodgeCd = 0.85;
+    this.guarding = false; this.meleeQueued = false;
+    this.yaw = Math.atan2(-this.dodgeDir.x, -this.dodgeDir.z); this.root.rotation.y = this.yaw;
+    this.invulnerable = Math.max(this.invulnerable, 0.42);
+    if (this.adrenalineT <= 0) { this.stamina = Math.max(0, this.stamina - 14); this.staminaDelay = 0.9; }
+    this.anim.full('Roll', { fade: 0.06, loop: false, speed: MELEE.rollSpeed, restart: true });
+    audio.play('swing', { volume: 0.3, rate: 0.6 }); audio.proc?.rustle(0.22, 0.3);
+    noise.emit(this.pos, 3.5, 'step');
   }
 
   useBestHeal() {
@@ -750,12 +973,13 @@ export class Player implements PlayerLike {
     if (this.state === 'reload') this.finishReload();
     if (this.state === 'heal') { this.hp = Math.min(this.maxHp, this.hp + ((this as any)._healAmount || 25)); bus.emit('hp', this.hp, 'heal'); }
     if (this.state === 'down') { this.state = 'normal'; this.anim.full('Idle_Loop', { fade: 0.3 }); return; }
-    if (['reload', 'heal', 'interact', 'melee', 'shoot', 'hurt', 'throw'].includes(this.state)) this.state = 'normal';
+    if (['reload', 'heal', 'interact', 'melee', 'shoot', 'hurt', 'throw', 'dodge'].includes(this.state)) this.state = 'normal';
   }
 
   // -------------------------------------------------------------- damage --
-  damage(amount: number, from: THREE.Vector3, opts: { knock?: boolean; kind?: string } = {}) {
+  damage(amount: number, from: THREE.Vector3, opts: { knock?: boolean; kind?: string; attacker?: { blocked(parry: boolean): void } } = {}) {
     if (this.dead || this.invulnerable > 0) return;
+    if (this.blocks(from)) { const k = this.block(amount, from, opts); if (k <= 0) return; amount = Math.round(amount * k); }
     this.hp -= amount;
     this.invulnerable = 0.45;
     bus.emit('hp', this.hp, 'hit', amount);
@@ -772,9 +996,55 @@ export class Player implements PlayerLike {
     this.limp = this.hp < 25 ? 1 : 0;
   }
 
+  /** Raised block facing the attack. */
+  private blocks(from: THREE.Vector3) {
+    if (!this.guarding || this.guardBlend < 0.4) return false;
+    tmp.subVectors(from, this.pos).setY(0).normalize();
+    return -Math.sin(this.yaw) * tmp.x - Math.cos(this.yaw) * tmp.z > 0.2;
+  }
+  /**
+   * A blocked hit. Raised just in time (first ~0.3 s) it is a parry: no damage and the
+   * attacker reels. Otherwise a fraction gets through (the pipe takes more than bare
+   * forearms) and it costs stamina; out of stamina the guard breaks and the hit lands.
+   * Returns the share of the hit the caller still applies (0 = fully handled here).
+   */
+  private block(amount: number, from: THREE.Vector3, opts: { knock?: boolean; attacker?: { blocked(parry: boolean): void } }) {
+    const pipe = this.inv.equipped === 'pipe';
+    tmp.subVectors(this.pos, from).setY(0).normalize();
+    if (this.guardT < 0.3) {
+      opts.attacker?.blocked(true);
+      this.stamina = Math.max(0, this.stamina - 4); this.staminaDelay = 0.6;
+      this.invulnerable = 0.3;
+      this.vel.addScaledVector(tmp, 0.8);
+      audio.proc?.clank(pipe ? 0.6 : 0.4, pipe ? 1 : 0.3);
+      bus.emit('hitstop', 0.09); bus.emit('parry');
+      if (settings.data.vibration) vibrate(35);
+      return 0;
+    }
+    const cost = Math.min(40, amount * (pipe ? 1.0 : 1.4) + 6);
+    this.stamina -= cost; this.staminaDelay = 0.9;
+    if (this.stamina <= 0) {
+      // guard broken: arms knocked aside, the hit lands at most of its strength
+      this.stamina = 0; this.staminaLock = true; this.guarding = false; this.guardBreakT = 1.1;
+      audio.proc?.clank(0.35, 0.2);
+      return 0.7;
+    }
+    opts.attacker?.blocked(false);
+    const dmg = Math.max(1, Math.round(amount * (pipe ? 0.22 : 0.4)));
+    this.hp -= dmg; this.invulnerable = 0.35;
+    bus.emit('hp', this.hp, 'hit', dmg);
+    this.vel.addScaledVector(tmp, opts.knock ? 3 : 1.3);
+    audio.proc?.clank(pipe ? 0.45 : 0.3, pipe ? 0.45 : 0.1);
+    audio.play('hit', { volume: 0.45 });
+    if (settings.data.vibration) vibrate(25);
+    if (this.hp <= 0) { this.hp = 0; this.releaseGrab(false); this.die(); }
+    return 0;
+  }
+
   startGrab(enemy: any): boolean {
-    if (this.dead || this.grabbedBy || this.invulnerable > 0 || this.state === 'down') return false;
-    this.grabbedBy = enemy; this.state = 'grabbed'; this.stateT = 0;
+    if (this.dead || this.grabbedBy || this.invulnerable > 0 || this.state === 'down' || this.state === 'dodge') return false;
+    if (this.blocks(enemy.pos)) return false; // a raised block shoves the grab off (the hit is then blocked)
+    this.grabbedBy = enemy; this.state = 'grabbed'; this.stateT = 0; this.guarding = false;
     this.struggle = 1; this.grabDmgT = 0.6;
     this.anim.full('Push_Loop', { fade: 0.1, speed: 1.4 });
     tmp.subVectors(enemy.pos, this.pos); this.yaw = Math.atan2(-tmp.x, -tmp.z);
@@ -851,20 +1121,21 @@ export class Player implements PlayerLike {
       const dot = (this.vel.x * fx + this.vel.z * fz) / v;
       if (dot < -0.3) backwards = true;
     }
-    // a melee swing owns the whole body until it recovers
-    if (st !== 'melee') {
+    // a melee swing or a roll owns the whole body until it recovers
+    if (st !== 'melee' && st !== 'dodge') {
       const l = this.anim.legs(legs, { fade: 0.22, speed: rate * (backwards ? -1 : 1) });
       if (l) l.timeScale = rate * (backwards ? -1 : 1);
     }
     // upper body
-    const busy = ['reload', 'heal', 'interact', 'melee', 'shoot', 'hurt', 'throw'].includes(st);
+    const busy = ['reload', 'heal', 'interact', 'melee', 'shoot', 'hurt', 'throw', 'dodge'].includes(st);
     if (!busy) {
       if (aiming) this.anim.arms('Pistol_Aim_Neutral', { fade: 0.12 });
       else if (this.firearm && v < 3.6) this.anim.arms(v > 0.2 && !this.crouching ? 'Pistol_Idle_Loop' : 'Pistol_Idle_Loop', { fade: 0.25 });
       else this.anim.arms(legs, { fade: 0.25, sync: true, speed: rate });
     }
     // melee hit frame
-    if (st === 'melee' && !(this as any)._meleeDone && this.stateT > this.meleeHitT) { (this as any)._meleeDone = true; this.onMelee(ITEMS.pipe.weapon!); }
+    if (st === 'melee' && !(this as any)._meleeDone && this.stateT > this.meleeHitT) { (this as any)._meleeDone = true; this.onMelee(this.meleeLight ? LIGHT_SWING : ITEMS.pipe.weapon!); }
+    if (st === 'dodge' && this.stateT > 1.47 / MELEE.rollSpeed + 0.12) this.state = 'normal'; // in case the clip end was missed
     if (st === 'throw' && !(this as any)._thrown && this.stateT > 0.42) { (this as any)._thrown = true; this.onFlare(); }
     this.anim.update(dt);
     // procedural aiming (on top of the clips; the bones are reset to bind pose before
@@ -874,12 +1145,23 @@ export class Player implements PlayerLike {
     this.aimBlend += ((aiming ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 10);
     if (this.aimBlend > 0.01) this.aimUpperBody(v, backwards, rig);
     this.gunKick = Math.max(0, this.gunKick - dt * 5);
-    const handsBusy = ['reload', 'heal', 'interact', 'throw', 'melee'].includes(st);
+    const handsBusy = ['reload', 'heal', 'interact', 'throw', 'melee', 'dodge'].includes(st);
     const eq = this.inv.equipped;
     const twoHand = eq === 'shotgun' && !handsBusy && st !== 'hurt';
     if (twoHand) this.holdLongGun(rig); else this.restoreGunFit(eq);
+    // pistol: two-handed whenever the hands are free (eases out for reloads, hits, rolls)
+    this.pistolBlend += ((eq === 'pistol' && !handsBusy && st !== 'hurt' ? 1 : 0) - this.pistolBlend) * Math.min(1, dt * 10);
+    if (eq === 'pistol' && this.pistolBlend > 0.01) this.holdPistol(rig, this.pistolBlend);
+    // pipe: carried tip-down while walking about; block pose on top (both blended so nothing pops)
+    const carry = eq === 'pipe' && !this.guarding && (st === 'normal' || st === 'shoot');
+    this.carryBlend += ((carry ? 1 : 0) - this.carryBlend) * Math.min(1, dt * 8);
+    this.guardBlend += ((this.guarding ? 1 : 0) - this.guardBlend) * Math.min(1, dt * 16);
+    if (this.carryBlend > 0.01 && !handsBusy) this.carryPipe();
+    if (this.guardBlend > 0.01 && !handsBusy) this.holdGuard(eq === 'pipe');
     // fingers close around whatever is held (the clips hold open hands)
-    if (eq && !['heal', 'interact', 'throw'].includes(st)) this.applyGrip(1, this.firearm && (aiming || twoHand) ? 1 : 0);
+    const gb = this.guardBlend;
+    if (eq && !['heal', 'interact', 'throw'].includes(st)) this.applyGrip(1, this.firearm && (aiming || twoHand) ? 1 : eq === 'pistol' ? this.pistolBlend : eq === 'pipe' ? gb : 0);
+    else if (!eq && gb > 0.01) this.applyGrip(gb, gb);
   }
 
   private armRef = { yaw: 0, elev: 0 };
