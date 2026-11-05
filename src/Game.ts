@@ -9,7 +9,7 @@ import type { World } from './core/World';
 import { Level, Interactable } from './world/Level';
 import { LightPool } from './world/Lights';
 import { Atmosphere } from './world/Atmosphere';
-import { shared } from './world/Materials';
+import { shared, characterMaterial } from './world/Materials';
 import { BLOCK_SIGHT } from './world/Grid';
 import { Player } from './player/Player';
 import { CameraRig } from './player/CameraRig';
@@ -27,7 +27,7 @@ import { ITEMS } from './items/ItemDefs';
 import { Save, SaveData } from './save/Save';
 import { AREAS } from './areas';
 import { SCRIPTS, onAreaEnter, runEnding } from './story/Scripts';
-import type { ChoirBoss } from './enemies/Choir';
+import { ChoirBoss } from './enemies/Choir';
 import { OBJECTIVES } from './story/Objectives';
 import type { AreaDef, ExitDef, DoorDef, InteractDef } from './world/types';
 
@@ -69,6 +69,8 @@ export class Game implements World {
   bossHook: ((dt: number) => void) | null = null;
   ending = false;
   choir: ChoirBoss | null = null;
+  /** The boss, built (hidden) with its area so nothing compiles at the encounter. */
+  choirPre: ChoirBoss | null = null;
   collapse: { t: number; rockT: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
@@ -235,7 +237,25 @@ export class Game implements World {
   }
 
   // ---------------------------------------------------------- areas ---
-  async loadArea(id: string, spawn: string, at: { pos: THREE.Vector3; yaw: number } | null = null, menu = false) {
+  private loadQueue: Promise<void> = Promise.resolve();
+  private pendingLoad: { key: string; p: Promise<void> } | null = null;
+  /**
+   * Loads run one after another, and the same request twice (a double tap on an exit,
+   * on Retry) is one load. Two interleaved loads used to leave the first one's enemies in
+   * the scene, never updated: frozen in a T-pose next to their live copies.
+   */
+  loadArea(id: string, spawn: string, at: { pos: THREE.Vector3; yaw: number } | null = null, menu = false): Promise<void> {
+    const key = `${id}|${spawn}|${menu}|${at ? at.pos.toArray().join(',') : ''}`;
+    if (this.pendingLoad && this.pendingLoad.key === key) return this.pendingLoad.p;
+    const p = this.loadQueue.then(() => this.loadAreaNow(id, spawn, at, menu));
+    this.loadQueue = p.catch(() => {});
+    this.pendingLoad = { key, p };
+    const done = () => { if (this.pendingLoad?.p === p) this.pendingLoad = null; };
+    p.then(done, done);
+    return p;
+  }
+
+  private async loadAreaNow(id: string, spawn: string, at: { pos: THREE.Vector3; yaw: number } | null, menu: boolean) {
     const def: AreaDef = AREAS[id];
     if (!def) throw new Error('unknown area ' + id);
     this.state = 'loading';
@@ -264,6 +284,7 @@ export class Game implements World {
     noise.clear();
     this.bossHook = null; this.cine = null; this.hold = null; this.collapse = null;
     if (this.choir) { this.choir.dispose(); this.choir = null; }
+    if (this.choirPre) { this.choirPre.dispose(); this.choirPre = null; }
     this.rig.cinematic = null;
     this.fx.flare = null; this.fx.flareLight.intensity = 0;
     // build
@@ -275,6 +296,10 @@ export class Game implements World {
     this.player.setLevel(lvl);
     this.enemies = new EnemyManager(this.scene, this);
     if (!menu) await this.enemies.spawnAll(lvl.enemies, this.killed, this.flags);
+    if (id === 'choir' && !menu && !this.flags.has('choir_done')) {
+      const b = new ChoirBoss(this, lvl.w(16, 15, 0));
+      await b.init(); b.setActive(false); this.choirPre = b;
+    }
     // environment
     const env = def.env;
     const fogC = new THREE.Color(env.fog);
@@ -312,6 +337,11 @@ export class Game implements World {
       const p = s ? lvl.w(s.at[0], s.at[1], 1.7) : sp.pos.clone().setY(1.7);
       this.cam.position.copy(p);
     }
+    // characters that scripts bring in later (the forest apparition) get their textures now
+    const warmMats = (def.warmCharacters ?? []).map((v) => characterMaterial(v, 0x5fe8d0, 1));
+    // every texture of the area must have arrived before the warm-up below draws it: an
+    // image still loading was uploaded on its first visible frame instead (a hitch)
+    await assets.texturesSettled();
     // release GPU memory of textures this area doesn't use (mobile memory budget)
     assets.trimGPU(this.scene, [this.invUI.scene]);
     // warm shaders to avoid hitches. three.js only compiles *visible* objects, so the
@@ -339,6 +369,8 @@ export class Game implements World {
       this.engine.render(0.016); // the engine's real path: scene -> HDR target -> post
       restoreFx();
       for (const o of culled) o.frustumCulled = true;
+      // and anything not drawn above (scripted characters' skins) is uploaded explicitly
+      for (const m of warmMats) for (const t of [m.map, m.normalMap, m.roughnessMap, m.emissiveMap]) if (t) r.initTexture(t);
     } finally { r.setRenderTarget(null); for (const o of hidden) o.visible = false; }
     this.startAmbience(env);
     this.musicWanted = env.music ?? null;
@@ -527,7 +559,17 @@ export class Game implements World {
   manualSave() { Save.write(this.snapshot('manual', true)); bus.emit('toast', t('saved'), 'radio'); audio.play('radio_static', { volume: 0.5 }); }
 
   // ------------------------------------------------------- world hooks ---
-  onEnemyKilled(id: string) { this.killed.add(id); }
+  onEnemyKilled(id: string, at?: THREE.Vector3) {
+    this.killed.add(id);
+    // ammo that keeps the run alive: likely when nearly out, rare when well stocked
+    if (!at || !this.level || this.state === 'cutscene') return;
+    const inv = this.player.inv, has = (w: string) => inv.weapons.includes(w);
+    const nine = (inv.mags.pistol ?? 0) + inv.count('ammo_9mm'), shells = (inv.mags.shotgun ?? 0) + inv.count('ammo_shell');
+    let drop: [string, number] | null = null;
+    if (has('shotgun') && shells < 3 && Math.random() < 0.3) drop = ['ammo_shell', 2];
+    else if (has('pistol') && Math.random() < (nine < 8 ? 0.6 : nine < 20 ? 0.22 : 0.05)) drop = ['ammo_9mm', 3 + Math.floor(Math.random() * 3)];
+    if (drop) this.level.dropItem(drop[0], drop[1], at.clone().add(new THREE.Vector3(0.35, 0, 0.2)));
+  }
   onSpotted(e: any) {
     if (this.spotted.has(e.id)) return;
     this.spotted.add(e.id);
@@ -580,7 +622,15 @@ export class Game implements World {
     return '';
   }
 
+  private interacting = false;
   async interact(it: Interactable) {
+    // one interaction at a time (a second tap during an unlock pause started a second exit)
+    if (this.interacting) return;
+    this.interacting = true;
+    try { await this.interactNow(it); } finally { this.interacting = false; }
+  }
+
+  private async interactNow(it: Interactable) {
     const inv = this.player.inv;
     const tr = settings.data.language === 'tr';
     switch (it.kind) {

@@ -33,9 +33,12 @@ export function patchBaked(mat: THREE.MeshStandardMaterial, opts: { rm?: boolean
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec4 vBake;${opts.rm ? '\nvarying vec2 vRM;' : ''}\nuniform float uTime;`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${opts.vcEmissive ? 'float vcEmi = 1.0 - vColor.a;\n' : ''}diffuseColor.a = opacity;\ndiffuseColor.rgb *= vBake.a;`)
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>${opts.rm ? '\nroughnessFactor *= vRM.x;' : ''}`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>${opts.rm ? '\nroughnessFactor *= vRM.x;' : ''}\nroughnessFactor = max(roughnessFactor, 0.62);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>${opts.rm ? '\nmetalnessFactor = vRM.y;' : ''}`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vBake.rgb;${opts.vcEmissive ? '\ntotalEmissiveRadiance += vColor.rgb * vcEmi * 2.2;' : ''}`);
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vBake.rgb;${opts.vcEmissive ? '\ntotalEmissiveRadiance += vColor.rgb * vcEmi * 2.2;' : ''}`)
+      // floors/walls/ceilings are matte up close: a light half a metre away drew streaks
+      // and sparkling dots along normal-mapped tile grout
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular = min(reflectedLight.directSpecular * 0.4, vec3(0.3));');
   };
   mat.customProgramCacheKey = () => 'baked' + (opts.rm ? 'rm' : '') + (opts.vcEmissive ? 've' : '');
   return mat;
@@ -45,7 +48,7 @@ const surfCache = new Map<string, THREE.MeshStandardMaterial>();
 const SURF: Record<string, { color?: number; rough?: number; metal?: number; normal?: number; tint?: number }> = {
   ground_forest: { color: 0x8a8478, normal: 1.0 }, ground_mud: { color: 0x7a6d60, rough: 0.85 }, ground_grass: { color: 0x7c8270 },
   asphalt: { color: 0x7a7a7a }, road: { color: 0x8a8a8a }, concrete: { color: 0x9a968e }, concrete_light: { color: 0xb5b2a8 },
-  plaster: { color: 0xa8a49a }, tiles_white: { color: 0xa9aca8, rough: 0.5 }, tiles_check: { color: 0x9a948c, rough: 0.45 },
+  plaster: { color: 0xa8a49a }, tiles_white: { color: 0xa9aca8, rough: 0.72, normal: 0.6 }, tiles_check: { color: 0x9a948c, rough: 0.7, normal: 0.6 },
   ceiling: { color: 0x9a9890 }, wood_floor: { color: 0x9b8a7a, rough: 0.75 }, planks: { color: 0x8c7e70 }, bricks: { color: 0x9c8a7a },
   roof: { color: 0x6a6a6a }, metal_floor: { color: 0x8a8c90, metal: 0.6, rough: 0.6 }, metal_rust: { color: 0x8a7a70, metal: 0.4 },
   metal_painted: { color: 0x9a9c98, metal: 0.25 }, metal_green: { color: 0x8a9a90, metal: 0.25 }, rock: { color: 0x7c8088, normal: 1.4 },

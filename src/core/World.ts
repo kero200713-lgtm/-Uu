@@ -25,6 +25,6 @@ export interface World {
   camPos: THREE.Vector3;
   time: number;
   flags: Set<string>;
-  onEnemyKilled(id: string): void;
+  onEnemyKilled(id: string, at?: THREE.Vector3): void;
   hudMessage(text: string): void;
 }

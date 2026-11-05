@@ -9,9 +9,9 @@ varying vec2 vUv;
 void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
 const BRIGHT_FRAG = /* glsl */`
-uniform sampler2D tDiffuse; uniform float uThreshold; varying vec2 vUv;
+uniform sampler2D tDiffuse; uniform float uThreshold; uniform vec2 uScale; varying vec2 vUv;
 void main(){
-  vec3 c = texture2D(tDiffuse, vUv).rgb;
+  vec3 c = texture2D(tDiffuse, vUv * uScale).rgb;
   float l = max(c.r, max(c.g, c.b));
   float k = smoothstep(uThreshold, uThreshold * 2.2, l);
   gl_FragColor = vec4(c * k, 1.0);
@@ -31,7 +31,7 @@ void main(){
 const FINAL_FRAG = /* glsl */`
 uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom;
 uniform float uTime, uExposure, uVignette, uGrain, uCA, uSat, uContrast, uDamage, uLow, uFade, uFlash, uHum;
-uniform vec3 uLift, uGain; uniform vec2 uRes;
+uniform vec3 uLift, uGain; uniform vec2 uRes, uScale;
 varying vec2 vUv;
 vec3 aces(vec3 x){ const float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14; return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0); }
 vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
@@ -44,9 +44,10 @@ void main(){
   uv += d * sin(uTime * 3.0 + r2 * 20.0) * 0.004 * uHum;
   float ca = uCA * (0.4 + r2 * 2.0) + uDamage * 0.004;
   vec3 col;
-  col.r = texture2D(tScene, uv + d * ca).r;
-  col.g = texture2D(tScene, uv).g;
-  col.b = texture2D(tScene, uv - d * ca).b;
+  // dynamic resolution renders the scene into the lower-left part of the target (uScale)
+  col.r = texture2D(tScene, (uv + d * ca) * uScale).r;
+  col.g = texture2D(tScene, uv * uScale).g;
+  col.b = texture2D(tScene, (uv - d * ca) * uScale).b;
   // never let a stray Inf/NaN pixel through (it would show as separate R/G/B dots)
   if (!(col.r + col.g + col.b < 1.0e4)) col = vec3(0.0);
   col = min(col, vec3(48.0));
@@ -121,7 +122,7 @@ export class Engine {
     assets.anisotropy = this.q.anisotropy;
 
     const quadGeo = new THREE.PlaneGeometry(2, 2);
-    this.brightMat = new THREE.ShaderMaterial({ vertexShader: FS_VERT, fragmentShader: BRIGHT_FRAG, uniforms: { tDiffuse: { value: null }, uThreshold: { value: 0.9 } }, depthTest: false, depthWrite: false });
+    this.brightMat = new THREE.ShaderMaterial({ vertexShader: FS_VERT, fragmentShader: BRIGHT_FRAG, uniforms: { tDiffuse: { value: null }, uThreshold: { value: 0.9 }, uScale: { value: new THREE.Vector2(1, 1) } }, depthTest: false, depthWrite: false });
     this.blurMat = new THREE.ShaderMaterial({ vertexShader: FS_VERT, fragmentShader: BLUR_FRAG, uniforms: { tDiffuse: { value: null }, uDir: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false });
     this.finalMat = new THREE.ShaderMaterial({
       vertexShader: FS_VERT, fragmentShader: FINAL_FRAG, depthTest: false, depthWrite: false,
@@ -129,7 +130,7 @@ export class Engine {
         tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0 }, uTime: { value: 0 }, uExposure: { value: 1 },
         uVignette: { value: 1 }, uGrain: { value: 0.04 }, uCA: { value: 0.0015 }, uSat: { value: 0.85 }, uContrast: { value: 1.05 },
         uDamage: { value: 0 }, uLow: { value: 0 }, uFade: { value: 0 }, uFlash: { value: 0 }, uHum: { value: 0 },
-        uLift: { value: new THREE.Color() }, uGain: { value: new THREE.Color(1, 1, 1) }, uRes: { value: new THREE.Vector2(1, 1) },
+        uLift: { value: new THREE.Color() }, uGain: { value: new THREE.Color(1, 1, 1) }, uRes: { value: new THREE.Vector2(1, 1) }, uScale: { value: new THREE.Vector2(1, 1) },
       },
     });
     this.fsQuad = new THREE.Mesh(quadGeo, this.finalMat);
@@ -187,7 +188,7 @@ export class Engine {
     let pr = dpr * this.q.renderScale * settings.data.renderScale;
     const px = window.innerWidth * window.innerHeight * pr * pr, budget = Engine.PIXEL_BUDGET[this.level] ?? 1.6e6;
     if (px > budget) pr *= Math.sqrt(budget / px);
-    return pr * this.dynScale;
+    return pr;
   }
 
   resize() {
@@ -243,10 +244,13 @@ export class Engine {
     if (this.frameAcc >= 0.5) {
       this.fps = this.frameCount / this.frameAcc;
       this.frameAcc = 0; this.frameCount = 0;
-      if (!settings.data.dynamicResolution || this.paused) return;
-      if (this.fps < 27) { this.slowTime += 0.5; this.fastTime = 0; } else if (this.fps > 52) { this.fastTime += 0.5; this.slowTime = 0; } else { this.slowTime = 0; this.fastTime = 0; }
-      if (this.slowTime >= 2 && this.dynScale > 0.6) { this.dynScale = Math.max(0.6, this.dynScale - 0.1); this.slowTime = 0; this.resize(); }
-      if (this.fastTime >= 5 && this.dynScale < 1) { this.dynScale = Math.min(1, this.dynScale + 0.1); this.fastTime = 0; this.resize(); }
+      // only with post-processing: the scale is a viewport inside the full-size target, so a
+      // change costs nothing (it used to reallocate the canvas and every render target -
+      // a freeze that lowered the measured fps again and repeated every 2 s)
+      if (!settings.data.dynamicResolution || this.paused || !this.rt) { this.dynScale = 1; return; }
+      if (this.fps < 28) { this.slowTime += 0.5; this.fastTime = 0; } else if (this.fps > 50) { this.fastTime += 0.5; this.slowTime = 0; } else { this.slowTime = 0; this.fastTime = 0; }
+      if (this.slowTime >= 1 && this.dynScale > 0.6) { this.dynScale = Math.max(0.6, this.dynScale - 0.05); this.slowTime = 0; }
+      if (this.fastTime >= 3 && this.dynScale < 1) { this.dynScale = Math.min(1, this.dynScale + 0.05); this.fastTime = 0; }
     }
   }
 
@@ -263,7 +267,14 @@ export class Engine {
       r.render(this.scene, this.camera);
       return;
     }
-    r.setRenderTarget(this.rt);
+    // dynamic resolution: draw into the lower-left dynScale part of the full-size target
+    const s = this.dynScale, rt = this.rt;
+    rt.viewport.set(0, 0, Math.max(1, Math.floor(rt.width * s)), Math.max(1, Math.floor(rt.height * s)));
+    const sx = rt.viewport.z / rt.width, sy = rt.viewport.w / rt.height;
+    (u.uScale.value as THREE.Vector2).set(sx, sy);
+    (this.brightMat.uniforms.uScale.value as THREE.Vector2).set(sx, sy);
+    (u.uRes.value as THREE.Vector2).set(rt.viewport.z, rt.viewport.w);
+    r.setRenderTarget(rt);
     r.render(this.scene, this.camera);
     let bloomTex: THREE.Texture | null = null;
     if (this.bloomA && this.bloomB) {

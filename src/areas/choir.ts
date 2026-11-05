@@ -67,8 +67,9 @@ export const choir: AreaDef = {
       model: { pack: 'facility', name: 'Props_Computer', scale: 1.2, solid: true } },
     { type: 'light', at: [16, 3.0], h: 2.2, color: 0xffb070, intensity: 3, range: 7, flicker: 'flicker', bake: 0.8 },
     { type: 'doc', id: 'd_final', doc: 'final_note', at: [14.2, 3.6], rot: 20 },
-    { type: 'item', id: 'i_ch_ammo', item: 'ammo_9mm', count: 10, at: [18.4, 3.8] },
-    { type: 'item', id: 'i_ch_shells', item: 'ammo_shell', count: 4, at: [13.6, 28.4] },
+    { type: 'item', id: 'i_ch_ammo', item: 'ammo_9mm', count: 12, at: [18.4, 3.8] },
+    { type: 'item', id: 'i_ch_ammo2', item: 'ammo_9mm', count: 8, at: [14.2, 28.6] },
+    { type: 'item', id: 'i_ch_shells', item: 'ammo_shell', count: 6, at: [13.6, 28.4] },
     { type: 'item', id: 'i_ch_medkit', item: 'medkit', at: [17.8, 29.4] },
     { type: 'light', at: [16, 30], h: 2.5, color: 0xdfe8ff, intensity: 3, range: 8, flicker: 'broken', bake: 0.6 },
     // dormant spawns woken by the boss

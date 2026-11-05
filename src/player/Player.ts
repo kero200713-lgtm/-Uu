@@ -179,7 +179,7 @@ const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _vc = new THREE.Vect
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4();
 const _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _vOne = new THREE.Vector3(1, 1, 1), _q3 = new THREE.Quaternion();
-const [_g1, _g2, _g3, _g4, _g5, _g6, _g7, _g8, _g9] = Array.from({ length: 9 }, () => new THREE.Vector3());
+const [_g1, _g2, _g3, _g4, _g5, _g6, _g7, _g8, _g9, _g10, _g11] = Array.from({ length: 11 }, () => new THREE.Vector3());
 
 export class Player implements PlayerLike {
   human!: Human; anim!: Animator;
@@ -555,10 +555,11 @@ export class Player implements PlayerLike {
   }
 
   /**
-   * Pistol, two hands: raised, an isosceles hold centred in front of the chest with the
-   * barrel on the crosshair point; lowered, a compressed low ready (muzzle toward the
-   * ground a few metres ahead). The support hand cups the shooting hand on the grip.
-   * Blended by `k` from the animated pose so reloads and hits ease in and out.
+   * Pistol: raised, a two-hand isosceles hold centred in front of the chest with the
+   * barrel on the crosshair point (the support hand cups the shooting hand); lowered,
+   * carried in the right hand by the thigh, muzzle to the ground, the left arm free
+   * (a two-hand low ready pulled the forearms through the jacket). Blended by `k` from
+   * the animated pose so reloads and hits ease in and out.
    */
   private holdPistol(rig: CameraRig, k: number) {
     const g = this.weapons.get('pistol'), fit = g && this.gunFit.get(g);
@@ -569,10 +570,10 @@ export class Player implements PlayerLike {
     const S = shR.getWorldPosition(_g3).add(shL.getWorldPosition(_g4)).multiplyScalar(0.5); // between the shoulders
     const aimDir = rig.forward(_g5);
     if (this.aimTarget) { const to = _g6.copy(this.aimTarget).sub(S); if (to.lengthSq() > 1 && to.normalize().dot(aimDir) > 0.6) aimDir.copy(to); }
-    // grip point and barrel direction, aimed vs low ready
+    // grip point and barrel direction, aimed vs carried at the side
     const Pa = _g6.copy(S).addScaledVector(up, -0.07).addScaledVector(aimDir, 0.44).addScaledVector(right, 0.02);
-    const Pl = _g7.copy(S).addScaledVector(up, -0.3).addScaledVector(fwd, 0.3).addScaledVector(right, 0.04);
-    const Dl = _g8.copy(fwd).multiplyScalar(0.72).addScaledVector(up, -0.66).addScaledVector(right, -0.12).normalize();
+    const Pl = shR.getWorldPosition(_g7).addScaledVector(up, -0.5).addScaledVector(fwd, 0.13).addScaledVector(right, 0.08);
+    const Dl = _g8.copy(fwd).multiplyScalar(0.45).addScaledVector(up, -0.88).addScaledVector(right, 0.06).normalize();
     const P = Pl.lerp(Pa, a), D = Dl.lerp(aimDir, a).normalize();
     D.addScaledVector(up, 0.22 * this.gunKick).normalize(); P.addScaledVector(D, -0.035 * this.gunKick);
     const Y = _g9.copy(up).addScaledVector(D, -up.dot(D)).normalize(), X = _v2.crossVectors(Y, D);
@@ -582,7 +583,10 @@ export class Player implements PlayerLike {
     _m3.multiplyMatrices(gunW, fit.handRel).decompose(_v1, _q2, _v3);
     hR.getWorldPosition(_v4); _v1.lerpVectors(_v4, _v1, k);
     hR.getWorldQuaternion(_q3); _q3.slerp(_q2, k);
-    this.ik('upperarm_r', 'lowerarm_r', 'hand_r', _v1, _v4.copy(S).addScaledVector(up, -0.7).addScaledVector(right, 0.5));
+    // elbow: down and out when raised, behind the hip when carried
+    _v5.copy(S).addScaledVector(up, -0.7).addScaledVector(right, 0.5);
+    _v4.copy(S).addScaledVector(up, -0.35).addScaledVector(right, 0.45).addScaledVector(fwd, -0.45).lerp(_v5, a);
+    this.ik('upperarm_r', 'lowerarm_r', 'hand_r', _v1, _v4);
     this.setWorldQuat(hR, _q3);
     // gun follows the right hand bone
     this.weaponHolder.updateWorldMatrix(true, false);
@@ -595,9 +599,9 @@ export class Player implements PlayerLike {
     const fR = _v1.copy(H.f).applyQuaternion(_q2), sR = _v3.copy(H.s).applyQuaternion(_q2);
     const hole = _v4.copy(H.hole).applyQuaternion(_q2).add(hR.getWorldPosition(_v5));
     // mirror the shooting fist across the gun's vertical plane, then shift it to the left of the grip
-    const fL = _g3.copy(fR).addScaledVector(X, -2 * fR.dot(X)), sL = _g4.copy(sR).addScaledVector(X, -2 * sR.dot(X));
+    const fL = _g10.copy(fR).addScaledVector(X, -2 * fR.dot(X)), sL = _g11.copy(sR).addScaledVector(X, -2 * sR.dot(X));
     hole.addScaledVector(X, -0.036).addScaledVector(D, 0.012).addScaledVector(Y, -0.012);
-    this.placeFist('l', hole, fL, sL, _g5.copy(S).addScaledVector(up, -0.7).addScaledVector(right, -0.5), k);
+    if (k * a > 0.01) this.placeFist('l', hole, fL, sL, _g5.copy(S).addScaledVector(up, -0.7).addScaledVector(right, -0.5), k * a);
   }
 
   /**
@@ -1113,7 +1117,7 @@ export class Player implements PlayerLike {
     else if (v > 3.6) { legs = 'Sprint_Loop'; rate = v / 4.7; }
     else if (v > 2.0) { legs = 'Jog_Fwd_Loop'; rate = v / 3.1; }
     else if (v > 0.2) { legs = 'Walk_Loop'; rate = Math.max(0.55, v / 1.45); }
-    else if (this.firearm) legs = 'Pistol_Idle_Loop';
+    else if (this.firearm && (aiming || this.inv.equipped !== 'pistol')) legs = 'Pistol_Idle_Loop'; // pistol carried low: plain stance
     // aim strafing: play walk backwards when moving away from facing
     let backwards = false;
     if (aiming && v > 0.2) {
@@ -1130,7 +1134,8 @@ export class Player implements PlayerLike {
     const busy = ['reload', 'heal', 'interact', 'melee', 'shoot', 'hurt', 'throw', 'dodge'].includes(st);
     if (!busy) {
       if (aiming) this.anim.arms('Pistol_Aim_Neutral', { fade: 0.12 });
-      else if (this.firearm && v < 3.6) this.anim.arms(v > 0.2 && !this.crouching ? 'Pistol_Idle_Loop' : 'Pistol_Idle_Loop', { fade: 0.25 });
+      // (the pistol hangs in the right hand by the thigh: the arms just follow the walk)
+      else if (this.firearm && v < 3.6 && this.inv.equipped !== 'pistol') this.anim.arms('Pistol_Idle_Loop', { fade: 0.25 });
       else this.anim.arms(legs, { fade: 0.25, sync: true, speed: rate });
     }
     // melee hit frame
@@ -1160,7 +1165,7 @@ export class Player implements PlayerLike {
     if (this.guardBlend > 0.01 && !handsBusy) this.holdGuard(eq === 'pipe');
     // fingers close around whatever is held (the clips hold open hands)
     const gb = this.guardBlend;
-    if (eq && !['heal', 'interact', 'throw'].includes(st)) this.applyGrip(1, this.firearm && (aiming || twoHand) ? 1 : eq === 'pistol' ? this.pistolBlend : eq === 'pipe' ? gb : 0);
+    if (eq && !['heal', 'interact', 'throw'].includes(st)) this.applyGrip(1, this.firearm && (aiming || twoHand) ? 1 : eq === 'pistol' ? this.pistolBlend * this.aimBlend : eq === 'pipe' ? gb : 0);
     else if (!eq && gb > 0.01) this.applyGrip(gb, gb);
   }
 
@@ -1231,6 +1236,16 @@ export class Player implements PlayerLike {
       const bx = -Math.sin(this.yaw), bz = -Math.cos(this.yaw);
       fwd.x = fwd.x * 0.6 + bx * 0.4; fwd.z = fwd.z * 0.6 + bz * 0.4; fwd.y = Math.min(fwd.y, 0.05) - 0.08;
       fwd.normalize();
+    }
+    {
+      // a chest lamp points where the chest can: within ~70 degrees of her facing (with the
+      // camera in front of her, aiming the beam at the camera lit her own jacket white)
+      const h = Math.hypot(fwd.x, fwd.z);
+      if (h > 1e-3) {
+        const ab = Math.atan2(-Math.sin(this.yaw), -Math.cos(this.yaw));
+        let d = Math.atan2(fwd.x, fwd.z) - ab; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+        if (Math.abs(d) > 1.2) { d = Math.sign(d) * 1.2; fwd.x = Math.sin(ab + d) * h; fwd.z = Math.cos(ab + d) * h; }
+      }
     }
     const cur = this.flashTarget.position.clone().sub(this.flash.position).normalize();
     if (!isFinite(cur.x) || cur.lengthSq() < 0.5) cur.copy(fwd);

@@ -204,14 +204,19 @@ export function createEnemy(def: EnemyDef, w: World): Enemy {
 /** Owns enemies of the current area. */
 export class EnemyManager {
   list: Enemy[] = [];
+  /** Set when the area is torn down: spawns still being built must not enter the scene. */
+  cleared = false;
   constructor(public scene: THREE.Object3D, public w: World) {}
   async spawnAll(defs: EnemyDef[], killed: Set<string>, flags: Set<string>) {
     const todo = defs.filter((d) => !killed.has(d.id) && (!d.needFlag || flags.has(d.needFlag)));
     const made = await Promise.all(todo.map(async (d) => { const e = createEnemy(d, this.w); await e.init(); return e; }));
+    if (this.cleared) { for (const e of made) e.dispose(); return; }
     for (const e of made) { this.list.push(e); this.scene.add(e.root); }
   }
   async spawnOne(def: EnemyDef) {
-    const e = createEnemy(def, this.w); await e.init(); this.list.push(e); this.scene.add(e.root); return e;
+    const e = createEnemy(def, this.w); await e.init();
+    if (!this.cleared) { this.list.push(e); this.scene.add(e.root); } else e.dispose();
+    return e;
   }
   update(dt: number) { for (const e of this.list) e.update(dt); }
   get chasing() { return this.list.some((e) => e.state === 'chase' || e.state === 'attack' || e.state === 'grab'); }
@@ -221,7 +226,7 @@ export class EnemyManager {
     return best;
   }
   byId(id: string) { return this.list.find((e) => e.id === id); }
-  clear() { for (const e of this.list) e.dispose(); this.list = []; }
+  clear() { this.cleared = true; for (const e of this.list) e.dispose(); this.list = []; }
 }
 
 export { noise };

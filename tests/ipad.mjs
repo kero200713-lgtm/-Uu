@@ -76,7 +76,7 @@ for (let i = 1; i <= 6; i++) { await touch('touchMove', [{ ...L, y: L.y - i * 14
 await page.waitForFunction(() => window.__game.player.running, null, { timeout: 20000 }).catch(() => {});
 check('sprint button makes Ela sprint', await G(() => window.__game.player.running));
 await touch('touchEnd', []);
-await page.waitForTimeout(400);
+await page.waitForFunction(() => !window.__input?.runToggled && !window.__game.player.running, null, { timeout: 20000 }).catch(() => {});
 check('releasing the stick ends the sprint', await G(() => !window.__input?.runToggled && !window.__game.player.running));
 
 // ---- pipe: the aim slot turns into a hold-to-block shield button

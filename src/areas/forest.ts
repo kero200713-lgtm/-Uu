@@ -5,6 +5,7 @@ import type { AreaDef } from '../world/types';
 //         W plank wall  w wood floor  D door  v boarded window  F fence  G gate  _ concrete
 export const forest: AreaDef = {
   id: 'forest',
+  warmCharacters: ['hollow_miner'], // the apparition by the bus stop
   name: { tr: 'Orman Yolu', en: 'The Forest Road' },
   subtitle: { tr: 'Karaçam\'a 2 km — 03:41', en: '2 km to Karaçam — 03:41' },
   voidFill: 'trees',

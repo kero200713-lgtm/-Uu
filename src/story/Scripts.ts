@@ -153,8 +153,9 @@ export const SCRIPTS: Record<string, Fn> = {
   choir_enter: async (g) => {
     if (g.flags.has('choir_done')) return;
     const c = g.level.w(16, 15, 0);
-    const boss = new ChoirBoss(g, c);
-    await boss.init();
+    const boss = g.choirPre ?? new ChoirBoss(g, c);
+    if (g.choirPre) g.choirPre = null; else await boss.init();
+    boss.setActive(true);
     g.choir = boss;
     g.bossHook = (dt) => boss.update(dt);
     const p = g.player.pos.clone();

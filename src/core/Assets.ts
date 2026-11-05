@@ -46,13 +46,23 @@ class AssetStore {
   /** Low quality uses 512 px variants of the large colour/normal maps. */
   small = false;
 
+  private texInflight = new Set<Promise<void>>();
+  /** Resolves once every texture requested so far has arrived (or after `ms`, never blocking a load for long). */
+  texturesSettled(ms = 8000): Promise<void> {
+    return Promise.race([Promise.all([...this.texInflight]).then(() => {}), new Promise<void>((r) => setTimeout(r, ms))]);
+  }
+
   texture(path: string, srgb = false, repeat = true): THREE.Texture {
     if (this.small && /(_c|_albedo|_normal)\.jpg$/.test(path)) path = path.replace(/\.jpg$/, '_s.jpg');
     const key = path + (srgb ? '|s' : '');
     let t = this.tex.get(key);
     if (t) return t;
     this.pending++; this.report();
-    t = this.texLoader.load(BASE + path, () => { this.done++; this.report(); }, undefined, () => { this.done++; this.report(); console.warn('texture failed', path); });
+    let settle!: () => void;
+    const inflight = new Promise<void>((r) => { settle = r; });
+    this.texInflight.add(inflight);
+    const fin = () => { this.done++; this.report(); this.texInflight.delete(inflight); settle(); };
+    t = this.texLoader.load(BASE + path, fin, undefined, () => { console.warn('texture failed', path); fin(); });
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = this.anisotropy;

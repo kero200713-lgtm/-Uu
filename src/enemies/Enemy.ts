@@ -437,7 +437,7 @@ export class Enemy {
     this.vocal(this.t.voice.death, 1);
     audio.play('body_fall', { pos: this.pos.clone(), volume: 0.8, delay: 0.7 });
     this.w.fx.spores(this.pos.clone().setY(1.2), 14);
-    this.w.onEnemyKilled(this.id);
+    this.w.onEnemyKilled(this.id, this.pos);
     this.loopVoice?.stop(0.5);
   }
 

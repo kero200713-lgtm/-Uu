@@ -70,6 +70,8 @@ Kamera: omuz üstü, duvar çarpışmalı (küre süpürme + yumuşak geri dön�
 
 **Silah tutuşları:** tabanca (gerçek boyutlu, ~19 cm, tek çizim çağrısı) nişanda iki elle izosceles duruşta, nişan dışında iki elle alçak hazır pozisyonda; destek eli atış elini sarar. Boru yumruğun başparmak ekseni boyunca, sapın ucundan tutulur (önkola/dirseğe girmez); yürürken ucu ileri-aşağı.
 
+**Mermi ekonomisi:** sabit mermiler bölümlere dengeli dağıtılır (9mm: Kasaba 28, Sağlık Ocağı 24, Maden 20, Tesis 20, Koro 20; fişek: Maden 10, Tesis 6, Koro 6). Düşen bir yaratık, oyuncunun mermisi azaldıkça daha olası şekilde birkaç mermi bırakır (9mm: <8 → %60, <20 → %22, değilse %5; fişek <3 → %30). Tabanca nişan dışında sağ elde, uyluk yanında namlu yere bakarak taşınır.
+
 Kafaya isabet tüm silahlarda ×3 hasar verir (tek tabanca mermisi bir Oyuk'u düşürür) ve kafa geriye savrulur; gövde isabetleri gövdeyi sarsar, sendeletme eşiğini geçerse saldırıyı keser.
 
 Geri bildirim: isabet sesi + kan/kıvılcım parçacığı, düşmanın sendelemesi/yere düşmesi, kamera sarsıntısı (ayarlanabilir), titreşim (ayarlanabilir), isabet işareti (öldürme ve kafa vuruşu için ayrı renk), atış sonrası nişangâhın açılması.

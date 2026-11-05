@@ -95,6 +95,11 @@ export class ChoirBoss {
       this.tendrils.push(t); this.group.add(t);
     }
     this.light.position.set(c.x, 5, c.z);
+    // a telegraph ring and a spike exist from the start (hidden) so their shaders are
+    // compiled with the area, not at the first slam
+    const warm = new THREE.Group(); warm.visible = false; warm.name = 'choir_warm';
+    warm.add(new THREE.Mesh(new THREE.RingGeometry(1.6, 2.1, 32), this.ringMat), new THREE.Mesh(new THREE.ConeGeometry(0.7, 4.5, 7), this.spikeMat));
+    this.group.add(warm);
     this.g.scene.add(this.group, this.light);
     // collider (the mass blocks movement and sight)
     this.g.level.grid.addBox(c.x - 4.2, c.z - 4.2, c.x + 4.2, c.z + 4.2, false, true, 'choir');
@@ -187,6 +192,17 @@ export class ChoirBoss {
     this.tele.forEach((tg) => { this.group.remove(tg.ring); if (tg.spike) this.group.remove(tg.spike); });
     this.tele = [];
     this.g.level.grid.boxes.filter((b) => b.id === 'choir').forEach((b) => this.g.level.grid.removeBox(b));
+  }
+
+  /**
+   * Built hidden while the area loads (its light already counted, its shaders compiled by
+   * the loading warm-up); the encounter only switches it on. A PointLight added mid-game
+   * changed every lit shader and recompiled all of them at the boss intro.
+   */
+  setActive(on: boolean) {
+    this.group.visible = on;
+    if (this.kemal) this.kemal.h.root.visible = on;
+    if (!on) this.light.intensity = 0;
   }
 
   dispose() {

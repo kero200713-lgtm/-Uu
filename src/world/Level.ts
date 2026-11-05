@@ -102,7 +102,9 @@ export class Level {
   /** Entity positions are tile coordinates; .5 = tile centre. */
   async build(q: QualityPreset, pool: LightPool, flags: Set<string>) {
     const def = this.def, g = this.grid, T = this.T;
-    const ents = def.entities;
+    // work on copies: the area definition is shared by every visit, and fixtures added
+    // below used to pile up in it (each re-entry stacked one more desk lamp on the last)
+    const ents: EntityDef[] = def.entities.map((e) => ({ ...e }));
     const packs = new Set<string>(['items']);
     for (const e of ents) {
       if (e.type === 'prop' || e.type === 'scatter') packs.add(e.pack);
@@ -115,11 +117,16 @@ export class Level {
     // ---------- lights ----------
     const bakeLights: BakeLight[] = [];
     const ceilH0 = def.ceiling ?? 3;
+    const deskLamps = new Set<string>();
     for (const e of ents) if (e.type === 'light') {
       const L = e as LightDef;
       let h = L.h ?? 2.7;
       const [lx, ly] = [Math.floor(L.at[0]), Math.floor(L.at[1])];
-      if (!L.model && g.info(lx, ly).indoor) {
+      // a lamp the area already places right there is this light's fixture
+      const lamp = ents.find((p) => p.type === 'prop' && /^Light_/.test((p as PropDef).name) && Math.hypot((p as PropDef).at[0] - L.at[0], (p as PropDef).at[1] - L.at[1]) < 0.6) as PropDef | undefined;
+      if (lamp && !L.model && g.info(lx, ly).indoor) {
+        if (h < 1.6) { L.at = [lamp.at[0], lamp.at[1]]; h = Math.max(h, (lamp.h ?? 0) + (lamp.name === 'Light_Floor1' ? 1.45 : 0.24)); }
+      } else if (!L.model && g.info(lx, ly).indoor) {
         if (h >= 1.6) {
           // a real fixture on the ceiling; the light hangs below it, never against the ceiling
           // (lights a few cm from a surface blew past the HDR range -> sparkling coloured dots)
@@ -130,7 +137,9 @@ export class Level {
           const sup = this.findSupport(ents, L.at[0], L.at[1], 1.2);
           if (sup) {
             L.at = [sup.x, sup.y];
-            ents.push({ type: 'prop', pack: 'interior', name: 'Light_Desk', at: [sup.x, sup.y], h: sup.top, rot: (sup.x * 97) % 360, solid: false } as PropDef);
+            // one lamp per table: a second light near the same table shares it
+            const key = sup.x.toFixed(2) + ',' + sup.y.toFixed(2);
+            if (!deskLamps.has(key)) { deskLamps.add(key); ents.push({ type: 'prop', pack: 'interior', name: 'Light_Desk', at: [sup.x, sup.y], h: sup.top, rot: (sup.x * 97) % 360, solid: false } as PropDef); }
             h = sup.top + 0.24;
           } else {
             ents.push({ type: 'prop', pack: 'interior', name: 'Light_Floor1', at: L.at, solid: false } as PropDef);
@@ -171,7 +180,8 @@ export class Level {
       const solid = p.solid ?? (pg.size.y * s > 0.6 && Math.max(pg.size.x, pg.size.z) * s > 0.5);
       propPlacements.push({ pack: p.pack, name: p.name, m, solid, reqH: p.h ?? 0, yOff: lift + (p.tilt ? Math.min(pg.size.x, pg.size.z) * s / 2 : 0) });
       const wb = new THREE.Box3(pg.min.clone(), pg.max.clone()).applyMatrix4(m);
-      if (pg.size.y * s > 0.25 && !p.tilt && (p.h ?? 0) < 1.6) this.supports.push({ minX: wb.min.x, maxX: wb.max.x, minZ: wb.min.z, maxZ: wb.max.z, top: wb.max.y, m, name: p.pack + '/' + p.name });
+      // only real furniture tops carry things (never a lamp, plant, chair or curtain)
+      if (pg.size.y * s > 0.25 && !p.tilt && (p.h ?? 0) < 1.6 && !/Light_|Houseplant|Plant|Chair|Curtain|Carpet/.test(p.name)) this.supports.push({ minX: wb.min.x, maxX: wb.max.x, minZ: wb.min.z, maxZ: wb.max.z, top: wb.max.y, m, name: p.pack + '/' + p.name });
       if (solid) {
         // collide with what a person would bump into (the part below ~1.1 m), not the
         // whole bounding box: lamp arms, tree crowns, sign boards are no invisible walls
@@ -187,6 +197,7 @@ export class Level {
     }
     for (const e of ents) if (e.type === 'scatter') this.scatter(e as ScatterDef, q, propPlacements);
     if (def.dress) this.dressRooms(ents, placeProp);
+    this.placed = propPlacements; // (audits)
     // things put "on" something (h > 0) sit exactly on what is really under them, or
     // on the floor when nothing is (nothing floats)
     for (const pp of propPlacements) {
@@ -466,6 +477,7 @@ export class Level {
   /** Tops of placed furniture (world XZ box + top height), for putting things on them. */
   supports: { minX: number; maxX: number; minZ: number; maxZ: number; top: number; m: THREE.Matrix4; name?: string }[] = [];
   floatFixes: string[] = [];
+  placed: { pack: string; name: string; m: THREE.Matrix4 }[] = [];
   /** Height of the furniture top under (x, z) closest below want + 0.35 m, or null for none. */
   supportTop(x: number, z: number, want: number, self?: THREE.Matrix4): number | null {
     let best: number | null = null, inside = false;
@@ -960,6 +972,13 @@ export class Level {
       case 'spawn': this.spawns.set((e as SpawnDef).id, e as SpawnDef); break;
       case 'sound': this.sounds.push(e as SoundDef); break;
     }
+  }
+
+  private dropN = 0;
+  /** An item left on the floor at runtime (ammo dropped by a fallen enemy). */
+  dropItem(item: string, count: number, at: THREE.Vector3) {
+    const T = this.T;
+    this.addEntity({ type: 'item', id: `drop_${this.def.id}_${this.dropN++}`, item, count, at: [at.x / T, at.z / T] } as ItemDef, new Set());
   }
 
   removeInteractable(it: Interactable) {

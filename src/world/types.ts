@@ -43,6 +43,8 @@ export interface AreaDef {
   voidFill?: 'trees' | 'rock' | 'none';
   /** furnish indoor rooms automatically by floor type (see Level.dressRooms) */
   dress?: boolean;
+  /** character variants that scripts spawn later in this area (textures uploaded with the area) */
+  warmCharacters?: string[];
   env: AreaEnv;
   entities: EntityDef[];
   onEnter?: string;

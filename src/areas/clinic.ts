@@ -112,7 +112,7 @@ export const clinic: AreaDef = {
     // ---------------- patient room B
     { type: 'prop', pack: 'interior', name: 'Bed_Single', at: [19.2, 3.0], rot: 0, solid: true },
     { type: 'prop', pack: 'interior', name: 'Bed_Single', at: [21.8, 3.0], rot: 0, solid: true },
-    { type: 'item', id: 'i_cl_ammo3', item: 'ammo_9mm', count: 6, at: [21.6, 8.6] },
+    { type: 'item', id: 'i_cl_ammo3', item: 'ammo_9mm', count: 8, at: [21.6, 8.6] },
     { type: 'enemy', id: 'e_cl_lurk_b', kind: 'lurker', at: [19.6, 3.6], dir: 0, pose: 'lying' },
     // ---------------- morgue
     { type: 'light', at: [26.5, 5.5], h: 2.7, color: 0xb8e0ff, intensity: 3, range: 8, flicker: 'broken', bake: 0.4 },

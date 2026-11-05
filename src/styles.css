@@ -106,7 +106,7 @@ body.touch .hud-ammo { top: calc(70px + var(--sa-t)); }
 .tb-fire { width: 88px; height: 88px; right: calc(28px + var(--sa-r)); bottom: calc(34px + var(--sa-b)); border-width: 2px; }
 .tb-aim { width: 72px; height: 72px; right: calc(134px + var(--sa-r)); bottom: calc(30px + var(--sa-b)); }
 .tb-interact { width: 78px; height: 78px; right: calc(40px + var(--sa-r)); bottom: calc(146px + var(--sa-b)); border-color: var(--accent); color: var(--accent); }
-.tb-interact .lbl { position: absolute; right: 90px; white-space: nowrap; background: var(--panel); padding: 4px 10px; font-size: 14px; letter-spacing: 0.06em; color: var(--text); border-left: 2px solid var(--accent); }
+.tb-interact .lbl { position: absolute; right: 0; bottom: calc(100% + 34px); white-space: nowrap; /* above the button cluster: beside it, it ran over the weapon name */ background: var(--panel); padding: 4px 10px; font-size: 14px; letter-spacing: 0.06em; color: var(--text); border-left: 2px solid var(--accent); }
 .tb-interact .lbl:empty { display: none; }
 .tb-reload { width: 56px; height: 56px; right: calc(150px + var(--sa-r)); bottom: calc(116px + var(--sa-b)); }
 .tb-crouch { width: 58px; height: 58px; right: calc(224px + var(--sa-r)); bottom: calc(40px + var(--sa-b)); }
@@ -121,7 +121,7 @@ body.touch .hud-ammo { top: calc(70px + var(--sa-t)); }
 .tb-switch .wname { position: absolute; bottom: -17px; font-size: 10px; letter-spacing: 0.08em; white-space: nowrap; color: var(--text); opacity: 0.8; text-transform: uppercase; }
 #touch.lefty .tb-run { right: auto; left: calc(224px + var(--sa-l)); } #touch.lefty .tb-switch { right: auto; left: calc(150px + var(--sa-l)); }
 #touch.lefty .tb-fire { right: auto; left: calc(28px + var(--sa-l)); } #touch.lefty .tb-aim { right: auto; left: calc(134px + var(--sa-l)); }
-#touch.lefty .tb-interact { right: auto; left: calc(40px + var(--sa-l)); } #touch.lefty .tb-interact .lbl { right: auto; left: 90px; }
+#touch.lefty .tb-interact { right: auto; left: calc(40px + var(--sa-l)); } #touch.lefty .tb-interact .lbl { right: auto; left: 0; }
 #touch.lefty .tb-reload { right: auto; left: calc(150px + var(--sa-l)); } #touch.lefty .tb-crouch { right: auto; left: calc(224px + var(--sa-l)); }
 #touch.lefty .tb-heal { left: calc(170px + var(--sa-l)); }
 
@@ -240,6 +240,12 @@ body.touch .hud-ammo { top: calc(70px + var(--sa-t)); }
   .menu-title p { margin-bottom: 14px; }
   .inv-grid { grid-template-columns: repeat(4, minmax(52px, 1fr)); gap: 6px; }
   .area-title { top: 26%; }
+}
+@media (max-height: 460px) {
+  /* short phone screens: no room above the cluster (the ammo readout is there), so the
+     prompt sits left of the whole button group, level with the hand button */
+  .tb-interact .lbl { bottom: auto; top: 50%; transform: translateY(-50%); right: 256px; }
+  #touch.lefty .tb-interact .lbl { right: auto; left: 256px; }
 }
 @media (max-width: 600px) {
   .tb-dodge { right: calc(224px + var(--sa-r)); bottom: calc(184px + var(--sa-b)); }

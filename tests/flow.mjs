@@ -106,6 +106,16 @@ await page.waitForFunction(() => window.__game.state === 'play', null, { timeout
 const after = await G(() => ({ area: window.__game.areaId, w: window.__game.player.inv.weapons, x: window.__game.player.pos.x }));
 check('continue restores area + inventory', after.area === 'town' && after.w.includes('pistol'), JSON.stringify(after));
 
+// two loads requested back to back (double tap on an exit, Retry twice): no orphaned
+// enemies may stay in the scene outside the live list (they stood frozen in a T-pose)
+await G(() => { const g = window.__game; g.loadArea('clinic', 'from_town'); g.loadArea('clinic', 'from_mine'); return g.loadArea('clinic', 'from_mine'); });
+await page.waitForFunction(() => window.__game.state === 'play' && window.__game.areaId === 'clinic', null, { timeout: 180000 });
+await page.waitForTimeout(1500);
+const orphans = await G(() => { const g = window.__game, live = new Set(g.enemies.list.map((e) => e.root)); let n = 0, all = 0;
+  g.scene.traverse((o) => { if (o.isSkinnedMesh && o !== g.player.human.body && !g.player.human.meshes.includes(o)) { let r = o; while (r.parent && r.parent !== g.scene) r = r.parent; if (r !== g.player.root) { all++; if (!live.has(r)) n++; } } });
+  return { orphans: n, skinned: all, enemies: g.enemies.list.length }; });
+check('back-to-back loads leave no orphaned enemies', orphans.orphans === 0 && orphans.enemies > 0, JSON.stringify(orphans));
+
 console.log('page errors:', errors.length, errors.slice(0, 10));
 fs.writeFileSync(`${OUT}/flow-results.txt`, results.join('\n') + '\n' + errors.join('\n'));
 await b.close(); srv.close();

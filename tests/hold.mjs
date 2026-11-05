@@ -14,13 +14,15 @@ await page.goto(`http://localhost:${srv.address().port}/`);
 await page.waitForFunction(() => window.__game?.state === 'menu', null, { timeout: 180000 });
 await page.evaluate(() => window.__game.newGame());
 await page.waitForFunction(() => window.__game.state === 'play', null, { timeout: 180000 });
-await page.evaluate(() => { const g = window.__game; g.hud.show(false); g.touch.show(false); g.debugGive('pipe'); g.debugGive('pistol'); g.debugTeleport(12.5, 30, 180, 0); g.engine.grade.exposure = 3.0; g.engine.grade.vignette = 0; g.engine.paused = true; });
+await page.evaluate(() => { const g = window.__game; g.hud.show(false); g.touch.show(false); g.debugGive('pipe'); g.debugGive('shotgun'); g.debugGive('pistol'); g.debugTeleport(12.5, 30, 180, 0); g.engine.grade.exposure = 3.0; g.engine.grade.vignette = 0; g.engine.paused = true; });
 await page.waitForTimeout(800);
 // pose: [weapon|'' , setup js, frames to step, extra per-frame js]
 const POSES = {
   pistol_idle: ['pistol', '', 20],
   pistol_walk: ['pistol', '', 14, 'p.vel.set(-Math.sin(p.yaw) * 1.4, 0, -Math.cos(p.yaw) * 1.4)'],
   pistol_aim: ['pistol', "Object.defineProperty(p, 'aiming', { configurable: true, get: () => true })", 20],
+  shotgun_idle: ['shotgun', '', 20],
+  shotgun_aim: ['shotgun', "Object.defineProperty(p, 'aiming', { configurable: true, get: () => true })", 20],
   pipe_idle: ['pipe', '', 20],
   pipe_walk: ['pipe', '', 14, 'p.vel.set(-Math.sin(p.yaw) * 1.4, 0, -Math.cos(p.yaw) * 1.4)'],
   pipe_block: ['pipe', '', 14, "window.__input.held.add('guard')"],

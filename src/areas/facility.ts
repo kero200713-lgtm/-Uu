@@ -90,7 +90,7 @@ export const facility: AreaDef = {
     { type: 'prop', pack: 'facility', name: 'Props_Shelf_Tall', at: [30.1, 7], rot: -90, solid: true },
     { type: 'prop', pack: 'facility', name: 'Props_Shelf_Tall', at: [30.1, 10], rot: -90, solid: true },
     { type: 'doc', id: 'd_tekin2', doc: 'tekin_log2', at: [26.6, 10.4], rot: -15 },
-    { type: 'item', id: 'i_fc_ammo1', item: 'ammo_9mm', count: 8, at: [28.4, 5.8] },
+    { type: 'item', id: 'i_fc_ammo1', item: 'ammo_9mm', count: 10, at: [28.4, 5.8] },
     { type: 'enemy', id: 'e_fc_h2', kind: 'hollow', variant: 'town', at: [27.2, 7.6], dir: 90, patrol: [[27.2, 7.6], [27.2, 10.6], [25, 6]] },
     // ---------------- dormitory (safe room)
     { type: 'light', at: [16.5, 15.5], h: 1.1, color: 0xffa860, intensity: 3.4, range: 7, flicker: 'none', bake: 1.3 },
@@ -130,7 +130,7 @@ export const facility: AreaDef = {
     { type: 'prop', pack: 'facility', name: 'Props_Pod', at: [12.5, 25], solid: true },
     { type: 'prop', pack: 'facility', name: 'Props_Pod', at: [19.5, 25], solid: true },
     { type: 'prop', pack: 'interior', name: 'Houseplant_1', at: [14.4, 27.8] },
-    { type: 'item', id: 'i_fc_shells', item: 'ammo_shell', count: 5, at: [20.6, 27.8] },
+    { type: 'item', id: 'i_fc_shells', item: 'ammo_shell', count: 6, at: [20.6, 27.8] },
     { type: 'enemy', id: 'e_fc_lurk', kind: 'lurker', at: [15.8, 26.6], dir: 45, pose: 'lying' },
     { type: 'light', at: [28.5, 26], h: 3.0, color: 0xffb060, intensity: 3.5, range: 9, flicker: 'broken', bake: 0.6 },
     { type: 'prop', pack: 'facility', name: 'Props_Laser', at: [28.5, 26], rot: 0, solid: true },
