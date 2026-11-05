@@ -81,8 +81,23 @@ export function meleeSwing(c: CombatCtx, w: WeaponDef, yaw: number) {
     e.damage(w.damage, dir, 'body', w.stagger, w.knockdown, e.pos.clone().setY(1.3));
     hit = true;
   }
-  if (hit) { audio.play('hit', { volume: 0.9 }); c.rig.shake(0.18); bus.emit('hitmarker', false, false); }
-  else audio.play('swing', { volume: 0.4, rate: 0.9 });
+  // (the swing whoosh itself is played by the player when the swing starts)
+  if (hit) { audio.play('hit', { volume: 0.9 }); c.rig.shake(0.18); bus.emit('hitmarker', false, false); bus.emit('hitstop', 0.07); }
+}
+
+/** Melee helper: turn toward the closest enemy roughly in front, so a swing on a touch screen connects. */
+export function meleeFacing(c: CombatCtx, yaw: number): number {
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  let best = Infinity, out = yaw;
+  for (const e of c.enemies) {
+    if (e.state === 'dead' || e.state === 'dormant' || !e.root.visible) continue;
+    tmp.subVectors(e.pos, c.playerPos); tmp.y = 0;
+    const d = tmp.length();
+    if (d > 2.8 || d < 0.05) continue;
+    if ((tmp.x * fx + tmp.z * fz) / d < 0.2) continue; // only enemies in the front half
+    if (d < best) { best = d; out = Math.atan2(-tmp.x, -tmp.z); }
+  }
+  return out;
 }
 
 /**

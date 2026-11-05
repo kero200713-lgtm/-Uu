@@ -58,7 +58,7 @@ Kamera: omuz üstü, duvar çarpışmalı (küre süpürme + yumuşak geri dön�
 ## 7. Savaş
 | Silah | Hasar | Şarjör | Menzil | Gürültü | Rol |
 |---|---|---|---|---|---|
-| Demir boru | 30 | — | 1.9 m | 5 | Zayıf ama sınırsız; sersemletir (0.7) |
+| Demir boru | 30 | — | 1.9 m | 5 | Sınırsız; tam vücut tepeden vuruş (~1,3 sn, isabet ~0,4 sn), yakındaki düşmana yönelir, isabette kısa duraksama; sersemletir (0.7) |
 | 9mm tabanca | 28 | 10 | 45 m | 26 | Ana silah |
 | Pompalı tüfek | 7 × 17 | 4 | 18 m | 34 | Nadir; yere serer, panik butonu |
 | Çakı | — | tek kullanım | — | — | Yakalanınca otomatik kurtarır |

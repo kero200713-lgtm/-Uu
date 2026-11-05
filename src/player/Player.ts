@@ -176,7 +176,7 @@ export class Player implements PlayerLike {
   grabbedBy: any = null; struggle = 0; grabDmgT = 0; grabKnifeT = 0;
   invulnerable = 0;
   fireCd = 0; spread = 0; recoil = 0;
-  stepDist = 0; moveAmount = 0;
+  stepDist = 0; moveAmount = 0; meleeHitT = 0.4;
   weaponHolder = new THREE.Group();
   weapons = new Map<string, THREE.Object3D>();
   muzzle = new THREE.Object3D();
@@ -187,6 +187,8 @@ export class Player implements PlayerLike {
   aimBlend = 0;
   onFire: (w: WeaponDef, origin: THREE.Vector3) => void = () => {};
   onMelee: (w: WeaponDef) => void = () => {};
+  /** Returns the yaw to swing at (soft target lock); identity by default. */
+  meleeYaw: (yaw: number) => number = (y) => y;
   onFlare: () => void = () => {};
   private shootHold = 0;
   private flickT = 0;
@@ -370,7 +372,7 @@ export class Player implements PlayerLike {
     if (mag > 0.08) {
       const base = this.crouching ? 1.05 : aiming ? 1.25 : mag < 0.6 ? 1.6 : 3.1;
       speed = this.running ? 4.7 : base * Math.min(1, mag / 0.6 + 0.2);
-      if (busy) speed *= this.state === 'heal' || this.state === 'reload' ? 0.45 : 0.25;
+      if (busy) speed *= this.state === 'heal' || this.state === 'reload' ? 0.45 : this.state === 'melee' ? 0.12 : 0.25;
       if (this.hp < 25) speed *= 0.82;
     }
     // stamina
@@ -495,13 +497,24 @@ export class Player implements PlayerLike {
     bus.emit('inv');
   }
 
+  /**
+   * Pipe: a committed overhead swing played on the whole body (hips and legs take
+   * part, movement nearly stops), at a speed that keeps the wind-up readable.
+   * The hit lands on the clip's contact frame and the next swing only starts once
+   * this one has recovered.
+   */
   startMelee() {
     const w = ITEMS.pipe.weapon!;
     if (this.fireCd > 0) return;
-    this.fireCd = w.fireDelay;
+    const pipe = this.inv.equipped === 'pipe';
+    const speed = pipe ? 1.15 : 1.2;
+    const len = (pipe ? 1.53 : 1.0) / speed;          // clip length at that speed
+    this.meleeHitT = (pipe ? 0.46 : 0.3) / speed;     // contact frame
+    this.fireCd = Math.max(w.fireDelay, len - 0.05);
     this.state = 'melee'; this.stateT = 0;
-    this.anim.arms(this.inv.equipped === 'pipe' ? 'Sword_Attack' : 'Punch_Cross', { fade: 0.08, loop: false, speed: 1.55 });
-    audio.play('swing', { volume: 0.7, delay: 0.12 });
+    this.yaw = this.meleeYaw(this.yaw); this.root.rotation.y = this.yaw;
+    this.anim.full(pipe ? 'Sword_Attack' : 'Punch_Cross', { fade: 0.12, loop: false, speed, restart: true });
+    audio.play('swing', { volume: 0.7, delay: Math.max(0, this.meleeHitT - 0.1) });
     (this as any)._meleeDone = false;
   }
 
@@ -516,7 +529,9 @@ export class Player implements PlayerLike {
   heal(id: string) {
     if (!this.inv.remove(id, 1)) return;
     this.state = 'heal'; this.stateT = 0;
-    this.anim.arms('Consume', { fade: 0.15, loop: false, speed: 1.6 });
+    // no dedicated bandaging clip in the library: the consume motion at a calm pace
+    // (first-aid kit slowest, adrenaline quickest)
+    this.anim.arms('Consume', { fade: 0.2, loop: false, speed: id === 'medkit' ? 1.0 : id === 'adrenaline' ? 1.4 : 1.2 });
     audio.play('bandage', { volume: 0.7 });
     (this as any)._healAmount = ITEMS[id].heal || 25;
     if (id === 'adrenaline') this.adrenalineT = 20;
@@ -532,7 +547,7 @@ export class Player implements PlayerLike {
   playInteract(kind: 'low' | 'mid' = 'mid') {
     if (this.dead || this.grabbedBy) return;
     this.state = 'interact'; this.stateT = 0;
-    this.anim.arms(kind === 'low' ? 'PickUp_Table' : 'Interact', { fade: 0.12, loop: false, speed: 1.8 });
+    this.anim.arms(kind === 'low' ? 'PickUp_Table' : 'Interact', { fade: 0.15, loop: false, speed: kind === 'low' ? 1.2 : 1.8 });
   }
 
   toggleFlash() {
@@ -647,8 +662,11 @@ export class Player implements PlayerLike {
       const dot = (this.vel.x * fx + this.vel.z * fz) / v;
       if (dot < -0.3) backwards = true;
     }
-    const l = this.anim.legs(legs, { fade: 0.22, speed: rate * (backwards ? -1 : 1) });
-    if (l) l.timeScale = rate * (backwards ? -1 : 1);
+    // a melee swing owns the whole body until it recovers
+    if (st !== 'melee') {
+      const l = this.anim.legs(legs, { fade: 0.22, speed: rate * (backwards ? -1 : 1) });
+      if (l) l.timeScale = rate * (backwards ? -1 : 1);
+    }
     // upper body
     const busy = ['reload', 'heal', 'interact', 'melee', 'shoot', 'hurt', 'throw'].includes(st);
     if (!busy) {
@@ -657,7 +675,7 @@ export class Player implements PlayerLike {
       else this.anim.arms(legs, { fade: 0.25, sync: true, speed: rate });
     }
     // melee hit frame
-    if (st === 'melee' && !(this as any)._meleeDone && this.stateT > 0.28) { (this as any)._meleeDone = true; this.onMelee(ITEMS.pipe.weapon!); }
+    if (st === 'melee' && !(this as any)._meleeDone && this.stateT > this.meleeHitT) { (this as any)._meleeDone = true; this.onMelee(ITEMS.pipe.weapon!); }
     if (st === 'throw' && !(this as any)._thrown && this.stateT > 0.42) { (this as any)._thrown = true; this.onFlare(); }
     this.anim.update(dt);
     // procedural: aim pitch + lower-body twist toward movement while aiming

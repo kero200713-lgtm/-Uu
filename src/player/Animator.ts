@@ -21,14 +21,19 @@ export function partClip(name: string, part: 'upper' | 'lower' | 'full'): THREE.
   return c;
 }
 
-interface PlayOpts { fade?: number; loop?: boolean; speed?: number; sync?: boolean; from?: number }
+interface PlayOpts { fade?: number; loop?: boolean; speed?: number; sync?: boolean; from?: number; restart?: boolean }
 
 class Layer {
   current: THREE.AnimationAction | null = null;
   name = '';
   constructor(private mixer: THREE.AnimationMixer, private part: 'upper' | 'lower', private root: THREE.Object3D) {}
   play(name: string, o: PlayOpts = {}, syncWith?: THREE.AnimationAction | null) {
-    if (this.name === name && this.current) { if (o.speed !== undefined) this.current.timeScale = o.speed; return this.current; }
+    if (this.name === name && this.current) {
+      if (o.speed !== undefined) this.current.timeScale = o.speed;
+      // same one-shot again (e.g. a second swing): replay it from the start
+      if (o.restart) { this.current.reset(); this.current.setEffectiveWeight(1); this.current.play(); }
+      return this.current;
+    }
     const clip = partClip(name, this.part);
     if (!clip) return null;
     const a = this.mixer.clipAction(clip, this.root);

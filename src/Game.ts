@@ -17,7 +17,7 @@ import { preloadHumans, setHair } from './player/CharacterFactory';
 import { EnemyManager } from './enemies/Types';
 import { FX } from './combat/FX';
 import { noise } from './combat/Noise';
-import { fireWeapon, meleeSwing, aimAssist, CombatCtx } from './combat/Combat';
+import { fireWeapon, meleeSwing, meleeFacing, aimAssist, CombatCtx } from './combat/Combat';
 import { audio, Voice } from './audio/AudioEngine';
 import { HUD } from './ui/HUD';
 import { TouchControls } from './ui/TouchControls';
@@ -96,6 +96,10 @@ export class Game implements World {
     await this.player.init(this.scene);
     this.player.onFire = (w, m) => fireWeapon(this.combatCtx(), w, m);
     this.player.onMelee = (w) => meleeSwing(this.combatCtx(), w, this.player.yaw);
+    this.player.meleeYaw = (yaw) => meleeFacing(this.combatCtx(), yaw);
+    // a few frames of slow motion on a melee hit: the blow lands with weight
+    let hitstopT: any = 0;
+    bus.on('hitstop', (s: number) => { this.engine.timeScale = 0.15; clearTimeout(hitstopT); hitstopT = setTimeout(() => { this.engine.timeScale = 1; }, s * 1000); });
     this.player.onFlare = () => {
       const f = this.rig.forward(new THREE.Vector3()); f.y = Math.max(f.y, 0.1);
       this.fx.throwFlare(this.player.pos.clone().setY(1.5), f.normalize());
