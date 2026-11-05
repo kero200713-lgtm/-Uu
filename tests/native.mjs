@@ -45,6 +45,7 @@ await page.addInitScript(() => {
       { name: 'Haptics', methods: ['impact', 'vibrate', 'notification'].map(P) },
       { name: 'StatusBar', methods: ['hide', 'show', 'setOverlaysWebView', 'setStyle'].map(P) },
       { name: 'SplashScreen', methods: ['hide', 'show'].map(P) },
+      { name: 'SystemBars', methods: ['hide', 'show', 'setStyle', 'setAnimation'].map(P) },
     ],
     nativePromise: (plugin, method, opts) => window.__native(JSON.stringify({ plugin, method, opts: opts || {} })).then((r) => JSON.parse(r)),
     nativeCallback: (plugin, method, opts, callback) => { const id = 'cb' + (++cb); if (method === 'addListener') (window.__listeners[opts.eventName] ||= []).push(callback); return id; },
@@ -61,6 +62,7 @@ await page.goto(URL);
 await waitState('menu', 180000);
 check('boots as native android', await G(() => window.Capacitor.getPlatform?.() === 'android' && window.Capacitor.isNativePlatform?.()));
 check('status bar hidden', calls.includes('StatusBar.hide'));
+check('system bars (home indicator / nav bar) hidden', calls.includes('SystemBars.hide'));
 check('no service worker in the app', (await G(() => navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then((r) => r.length) : 0)) === 0);
 check('existing settings mirrored to OS store', store.has('ugultu_settings_v1'));
 check('back/lifecycle listeners registered', await G(() => !!window.__listeners.backButton && !!window.__listeners.appStateChange));

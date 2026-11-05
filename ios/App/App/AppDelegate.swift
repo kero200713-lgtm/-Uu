@@ -44,11 +44,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 }
 
-/// Game view controller: no status bar, home indicator auto-hides, and swipes at
-/// the screen edges reach the game first (joystick / camera live near the edges).
+/// Game view controller: no status bar, and swipes at the screen edges reach the
+/// game first (joystick / camera live near the edges). The home indicator is
+/// auto-hidden through Capacitor's SystemBars plugin (SystemBars.hide() in
+/// src/platform/Native.ts), which owns prefersHomeIndicatorAutoHidden.
 class GameViewController: CAPBridgeViewController {
     override var prefersStatusBarHidden: Bool { true }
-    override var prefersHomeIndicatorAutoHidden: Bool { true }
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .all }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
 }

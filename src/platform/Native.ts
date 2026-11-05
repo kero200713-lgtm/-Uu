@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, SystemBars } from '@capacitor/core';
 
 /**
  * Thin platform layer. The same build runs as the native Android/iOS app
@@ -72,6 +72,8 @@ export async function initNative(): Promise<boolean> {
   } catch { prefs = null; }
   try { haptics = await import('@capacitor/haptics'); } catch { haptics = null; }
   try { const { StatusBar } = await import('@capacitor/status-bar'); await StatusBar.hide(); } catch { /* ignore */ }
+  // status bar + iOS home indicator / Android navigation bar out of the way of the game
+  try { await SystemBars.hide(); } catch { /* ignore */ }
   return restored;
 }
 
