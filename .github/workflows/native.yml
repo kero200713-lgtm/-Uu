@@ -72,7 +72,9 @@ jobs:
   ios:
     # macOS minutes are free on public repos; on a private repo run it only by hand
     if: ${{ (github.event_name == 'push' && !github.event.repository.private) || inputs.ios }}
-    runs-on: macos-latest
+    # a pinned image: jobs on macos-latest were twice cancelled after 15 min without a runner
+    runs-on: macos-15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
